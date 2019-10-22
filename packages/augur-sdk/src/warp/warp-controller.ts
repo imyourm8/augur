@@ -6,6 +6,7 @@ import { DB } from '../state/db/DB';
 
 export class WarpController {
   private ipfs: IPFS;
+  private static DEFAULT_NODE_TYPE = { format: 'dag-pb', hashAlg: 'sha2-256' };
 
   private root: any = {
     Links: [],
@@ -33,10 +34,9 @@ export class WarpController {
     });
 
     // TODO: Sort this by using pouch unless
-    const logs = _.sortBy(await this.db.findMarketCreatedLogs({
-      selector: {}
+    const logs = _.sortBy(await this.db.getSyncableDatabase("MarketCreated").allDocs({
+      include_docs: true
     }), ["blockNumber", "logIndex"]);
-
 
     console.log(logs.length)
 
@@ -48,7 +48,7 @@ export class WarpController {
       if (checkpoint.length > 0 && log.blockNumber > _.first(checkpoint).blockNumber - 1000) {
         console.log("Adding checkpoint")
         const checkpointSize = _.sumBy(checkpoint, 'Size');
-        const checkpointCID = await this.ipfs.dag.put(checkpoint);
+        const checkpointCID = await this.ipfs.dag.put(checkpoint, WarpController.DEFAULT_NODE_TYPE);
         checkpoints.push({
           Name: "check-${checkpoint[0].blockNumber}", // TODO: Make this the actual correct starting block number not just the first one from the group
           Hash: checkpointCID,
@@ -68,12 +68,11 @@ export class WarpController {
     }
 
     console.log("Adding all")
-    console.log(this.ipfs);
     const checkpointsCID = await this.ipfs.dag.put({
       Links: checkpoints,
       Data: ""
-    });
+    }, WarpController.DEFAULT_NODE_TYPE);
 
-    console.log(checkpointsCID);
+    console.log(checkpointsCID.toBaseEncodedString());
   }
 }
