@@ -8,6 +8,7 @@ import { Subscriptions } from '../subscriptions';
 import { IBlockAndLogStreamerListener } from './db/BlockAndLogStreamerListener';
 import { DB } from './db/DB';
 import { Markets } from './getter/Markets';
+import { WarpController } from '../warp/warp-controller';
 
 const settings = require('./settings.json');
 
@@ -31,6 +32,9 @@ export class Controller {
 
       const db = await this.db;
       await db.sync(this.augur, settings.chunkSize, settings.blockstreamDelay);
+
+      const warp = new WarpController(db);
+      warp.createAllCheckpoints();
 
       this.blockAndLogStreamerListener.listenForBlockRemoved(
         db.rollback.bind(db)

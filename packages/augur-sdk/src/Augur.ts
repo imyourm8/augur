@@ -123,7 +123,7 @@ export class Augur<TProvider extends Provider = Provider> {
     const networkId = await provider.getNetworkId();
     const augur = new Augur<TProvider>(provider, dependencies, networkId, addresses, connector, gnosisRelay, enableFlexSearch, meshClient, meshBrowser);
 
-    await augur.contracts.setReputationToken(networkId);
+    await augur.contracts.setReputationToken(networkId)
     return augur;
   }
 

@@ -141,10 +141,13 @@ export class LiquidityDB extends AbstractDB {
     );
 
     const marketIds = Object.keys(marketsWithOpenOrders);
-    const reportingFeeDivisor = await augur.contracts.universe.getReportingFeeDivisor_();
-    const marketCreatedLogs = await db.findMarketCreatedLogs({
-      selector: { market: { $in: marketIds } },
-    });
+    const [reportingFeeDivisor, marketCreatedLogs] = await Promise.all([
+      augur.contracts.universe.getReportingFeeDivisor_(),
+      db.findMarketCreatedLogs({
+        selector: { market: { $in: marketIds } },
+      })
+    ]);
+
     for (const marketCreatedLog of marketCreatedLogs) {
       const liquidityOrderBook = await getLiquidityOrderBook(augur, db, marketCreatedLog.market);
       if (!_.isEmpty(liquidityOrderBook)) {

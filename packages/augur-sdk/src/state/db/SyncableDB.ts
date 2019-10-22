@@ -97,7 +97,7 @@ export class SyncableDB extends AbstractDB {
       logs[i].sharesEscrowed = logs[i].uint256Data[8];
       logs[i].tokensEscrowed = logs[i].uint256Data[9];
 
-      delete logs[i].addressData;
+
       delete logs[i].uint256Data;
     }
   }
