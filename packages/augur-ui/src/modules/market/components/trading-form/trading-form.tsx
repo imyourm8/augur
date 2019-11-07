@@ -62,7 +62,7 @@ class TradingForm extends Component<TradingFormProps, TradingFormState> {
       ),
   };
 
-  UNSAFE_componentWillReceiveProps(nextProps: TradingFormProps) {
+  static getDerivedStateFromProps(nextProps: TradingFormProps) {
     const { selectedOutcomeId } = this.props;
     const { market } = nextProps;
     if (
@@ -76,9 +76,10 @@ class TradingForm extends Component<TradingFormProps, TradingFormState> {
           market.outcomesFormatted.find(
             outcome => outcome.id === nextProps.selectedOutcomeId
           );
-        this.setState({ selectedOutcome });
+        return { selectedOutcome };
       }
     }
+    return null;
   }
 
   toggleForm = () => {

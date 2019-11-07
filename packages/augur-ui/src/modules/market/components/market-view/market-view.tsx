@@ -148,67 +148,39 @@ export default class MarketView extends Component<
     this.toggleMiddleColumn = this.toggleMiddleColumn.bind(this);
   }
 
-  UNSAFE_componentWillMount() {
-    const {
-      isConnected,
-      loadFullMarket,
-      marketId,
-      loadMarketTradingHistory,
-      tradingTutorial,
-    } = this.props;
-    if (isConnected && !!marketId && !tradingTutorial) {
-      loadFullMarket(marketId);
-      loadMarketTradingHistory(marketId);
-    }
-  }
-
   componentDidMount() {
     this.node && this.node.scrollIntoView();
     window.scrollTo(0, 1);
-
-    const { isMarketLoading, showMarketLoadingModal } = this.props;
-
+    
+    const { isMarketLoading, showMarketLoadingModal, loadFullMarket, isConnected, marketId, loadMarketTradingHistory, } = this.props;
     if (isMarketLoading) {
       showMarketLoadingModal();
     } else {
       this.showMarketDisclaimer();
     }
+    if (isConnected && !!marketId) {
+      loadFullMarket(marketId);
+      loadMarketTradingHistory(marketId);
+    }
   }
 
-  UNSAFE_componentWillUpdate(nextProps) {
+  componentDidUpdate(prevProps: MarketViewProps) {
     const {
       isConnected,
       marketId,
       isMarketLoading,
       closeMarketLoadingModal,
-      tradingTutorial,
-      updateModal,
-    } = this.props;
-
-    if (tradingTutorial) {
-      if (
-        !nextProps.isMarketLoading && !this.state.introShowing &&
-        this.state.tutorialStep === TRADING_TUTORIAL_STEPS.INTRO_MODAL
-      ) {
-        updateModal({
-          type: MODAL_TUTORIAL_INTRO,
-          next: this.next,
-        });
-        this.setState({introShowing: true});
-      }
-      return;
-    }
-
+    } = prevProps;
     if (
-      isConnected !== nextProps.isConnected &&
-      (nextProps.isConnected &&
-        !!nextProps.marketId &&
-        (nextProps.marketId !== marketId || nextProps.marketType === undefined))
+      isConnected !== this.props.isConnected &&
+      (this.props.isConnected &&
+        !!this.props.marketId &&
+        (this.props.marketId !== marketId || this.props.marketType === undefined))
     ) {
-      nextProps.loadFullMarket(nextProps.marketId);
-      nextProps.loadMarketTradingHistory(marketId);
+      this.props.loadFullMarket(this.props.marketId);
+      this.props.loadMarketTradingHistory(marketId);
     }
-    if (isMarketLoading !== nextProps.isMarketLoading) {
+    if (isMarketLoading !== this.props.isMarketLoading) {
       closeMarketLoadingModal();
       this.showMarketDisclaimer();
     }
