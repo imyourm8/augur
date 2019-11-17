@@ -19,6 +19,8 @@ interface TransactionsProps {
   withdraw: Function;
   transactions: Function;
   approval: Function;
+  addFunds: Function;
+  legacyRepFaucet: Function;
 }
 
 export const Transactions = ({
@@ -28,6 +30,7 @@ export const Transactions = ({
   showFaucets,
   repFaucet,
   daiFaucet,
+  legacyRepFaucet,
 }: TransactionsProps) => (
   <QuadBox
     title="Transactions"
@@ -45,6 +48,15 @@ export const Transactions = ({
           </div>
         )}
         {showFaucets && (
+          <div>
+            <p>Legacy REP</p>
+            <REPFaucetButton
+              title="Legacy REP Faucet"
+              action={legacyRepFaucet}
+            />
+          </div>
+        )}
+        {!isMainnet && (
           <div>
             <p>DAI for test net</p>
             <DAIFaucetButton action={daiFaucet} />
