@@ -17,7 +17,6 @@ def signOrder(orderHash, private_key):
 def test_trade_1155_behavior(contractsFixture, cash, market, categoricalMarket, universe):
     ZeroXTrade = contractsFixture.contracts['ZeroXTrade']
     shareToken = contractsFixture.contracts['ShareToken']
-    shareToken = contractsFixture.contracts['ShareToken']
 
     account = contractsFixture.accounts[0]
     account2 = contractsFixture.accounts[1]
@@ -138,7 +137,7 @@ def test_basic_trading(contractsFixture, cash, market, universe):
     # First we'll create a signed order
     rawZeroXOrderData, orderHash = ZeroXTrade.createZeroXOrder(BID, fix(2), 60, market.address, YES, nullAddress, expirationTime, zeroXExchange.address, salt)
     signature = signOrder(orderHash, contractsFixture.privateKeys[0])
-    
+
     assert zeroXExchange.isValidSignature(orderHash, contractsFixture.accounts[0], signature)
 
     # Validate the signed order state
@@ -256,7 +255,7 @@ def test_one_bid_on_books_buy_full_order(withSelf, contractsFixture, cash, marke
             with TokenDelta(cash, -fix(2, 60), sender, "Creator cash not taken"):
                 with TokenDelta(cash, -fix(2, 40), contractsFixture.accounts[2], "Taker cash not taken"):
                     assert ZeroXTrade.trade(fix(2), nullAddress, tradeGroupID, orders, signatures, sender=contractsFixture.accounts[2], value=150000) == 0
-        
+
         assert shareToken.balanceOfMarketOutcome(market.address, YES, sender) == fix(2)
         assert shareToken.balanceOfMarketOutcome(market.address, NO, contractsFixture.accounts[2]) == fix(2)
     else:
