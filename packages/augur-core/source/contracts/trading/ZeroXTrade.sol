@@ -192,7 +192,8 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
         bytes32 _tradeGroupId,
         IExchange.Order[] memory _orders,
         bytes[] memory _signatures,
-        address _taker
+        address _taker,
+        bytes memory _extraData
     )
         /* @todo onlyPredicate */
         public
@@ -203,7 +204,8 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
 
         transferFromAllowed = true;
 
-        uint256 _protocolFee = 150000 * tx.gasprice;
+        // Remove this, otherwise hitting stack overflow
+        // uint256 _protocolFee = 150000 * tx.gasprice;
 
         // Do the actual asset exchanges
         for (uint256 i = 0; i < _orders.length && _fillAmountRemaining != 0; i++) {
@@ -212,7 +214,8 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
             IExchange _exchange = getExchangeFromAssetData(_order.makerAssetData);
 
             // Update 0x and pay protocol fee. This will also validate signatures and order state for us.
-            IExchange.FillResults memory totalFillResults = _exchange.fillOrderNoThrow.value(_protocolFee)(
+            // IExchange.FillResults memory totalFillResults;
+            IExchange.FillResults memory totalFillResults = _exchange.fillOrderNoThrow.value(150000 * tx.gasprice)(
                 _order,
                 _fillAmountRemaining,
                 _signatures[i]
@@ -222,7 +225,7 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
                 continue;
             }
 
-            uint256 _amountTraded  = doTrade(_order, totalFillResults.takerAssetFilledAmount, _affiliateAddress, _tradeGroupId, _taker);
+            uint256 _amountTraded  = doTrade(_order, totalFillResults.takerAssetFilledAmount, _affiliateAddress, _tradeGroupId, _taker, _extraData);
             _fillAmountRemaining = _fillAmountRemaining.sub(_amountTraded);
         }
 
@@ -238,12 +241,12 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
     function validateOrder(IExchange.Order memory _order) internal view {
         (IERC1155 _zeroXTradeToken, uint256 _tokenId) = getZeroXTradeTokenData(_order.makerAssetData);
         (IERC1155 _zeroXTradeTokenTaker, uint256 _tokenIdTaker) = getZeroXTradeTokenData(_order.takerAssetData);
-        require(_zeroXTradeToken == _zeroXTradeTokenTaker);
-        require(_tokenId == _tokenIdTaker);
-        require(_zeroXTradeToken == this);
+        require(_zeroXTradeToken == _zeroXTradeTokenTaker, "_zeroXTradeToken != _zeroXTradeTokenTaker");
+        require(_tokenId == _tokenIdTaker, "_tokenId != _tokenIdTaker");
+        require(_zeroXTradeToken == this, "_zeroXTradeToken != this");
     }
 
-    function doTrade(IExchange.Order memory _order, uint256 _amount, address _affiliateAddress, bytes32 _tradeGroupId, address _taker) private returns (uint256) {
+    function doTrade(IExchange.Order memory _order, uint256 _amount, address _affiliateAddress, bytes32 _tradeGroupId, address _taker, bytes memory _extraData) private returns (uint256) {
         // parseOrderData will validate that the token being traded is the legitimate one for the market
         AugurOrderData memory _augurOrderData = parseOrderData(_order);
         // If the signed order creator doesnt have enough funds we still want to continue and take their order out of the list
@@ -255,7 +258,7 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
         if (_order.makerAddress == _taker) {
             return 0;
         }
-        fillOrder.fillZeroXOrder(IMarket(_augurOrderData.marketAddress), _augurOrderData.outcome, IERC20(_augurOrderData.kycToken), _augurOrderData.price, Order.Types(_augurOrderData.orderType), _amount, _order.makerAddress, _tradeGroupId, _affiliateAddress, _taker);
+        fillOrder.fillZeroXOrder(IMarket(_augurOrderData.marketAddress), _augurOrderData.outcome, IERC20(_augurOrderData.kycToken), _augurOrderData.price, Order.Types(_augurOrderData.orderType), _amount, _order.makerAddress, _tradeGroupId, _affiliateAddress, _taker, _extraData);
         return _amount;
     }
 

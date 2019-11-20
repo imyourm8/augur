@@ -491,11 +491,18 @@ contract FillOrder is Initializable, ReentrancyGuard, IFillOrder {
         return fillOrderInternal(_filler, _tradeData, _amountFillerWants, _tradeGroupId);
     }
 
-    function fillZeroXOrder(IMarket _market, uint256 _outcome, IERC20 _kycToken, uint256 _price, Order.Types _orderType, uint256 _amount, address _creator, bytes32 _tradeGroupId, address _affiliateAddress, address _filler) external returns (uint256) {
-        require(msg.sender == zeroXTrade);
+    function fillZeroXOrder(IMarket _market, uint256 _outcome, IERC20 _kycToken, uint256 _price, Order.Types _orderType, uint256 _amount, address _creator, bytes32 _tradeGroupId, address _affiliateAddress, address _filler, bytes calldata _extraData) external returns (uint256) {
+        require(msg.sender == zeroXTrade, "fillZeroXOrder: Not Authorized");
+        updateStoredContracts(_extraData);
         Trade.OrderData memory _orderData = Trade.createOrderData(storedContracts.shareToken, _market, _outcome, _kycToken, _price, _orderType, _amount, _creator);
         Trade.Data memory _tradeData = Trade.createWithData(storedContracts, _orderData, _filler, _amount, _affiliateAddress);
         return fillOrderInternal(_filler, _tradeData, _amount, _tradeGroupId);
+    }
+
+    function updateStoredContracts(bytes memory _extraData) internal {
+        (address shareToken, address cash) = abi.decode(_extraData, (address, address));
+        storedContracts.shareToken = IShareToken(shareToken);
+        storedContracts.denominationToken = ICash(cash);
     }
 
     function fillOrderInternal(address _filler, Trade.Data memory _tradeData, uint256 _amountFillerWants, bytes32 _tradeGroupId) internal nonReentrant returns (uint256) {
