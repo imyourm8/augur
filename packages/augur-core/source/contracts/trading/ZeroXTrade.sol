@@ -214,7 +214,6 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
             IExchange _exchange = getExchangeFromAssetData(_order.makerAssetData);
 
             // Update 0x and pay protocol fee. This will also validate signatures and order state for us.
-            // IExchange.FillResults memory totalFillResults;
             IExchange.FillResults memory totalFillResults = _exchange.fillOrderNoThrow.value(150000 * tx.gasprice)(
                 _order,
                 _fillAmountRemaining,
@@ -258,7 +257,8 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
         if (_order.makerAddress == _taker) {
             return 0;
         }
-        fillOrder.fillZeroXOrder(IMarket(_augurOrderData.marketAddress), _augurOrderData.outcome, IERC20(_augurOrderData.kycToken), _augurOrderData.price, Order.Types(_augurOrderData.orderType), _amount, _order.makerAddress, _tradeGroupId, _affiliateAddress, _taker, _extraData);
+        fillOrder.fillZeroXOrder(IMarket(_augurOrderData.marketAddress), _augurOrderData.outcome, IERC20(_augurOrderData.kycToken), _augurOrderData.price, Order.Types(_augurOrderData.orderType), _amount, _order.makerAddress, _tradeGroupId, _taker, _extraData);
+        // fillOrder.fillZeroXOrder(IMarket(_augurOrderData.marketAddress), _augurOrderData.outcome, IERC20(_augurOrderData.kycToken), _augurOrderData.price, Order.Types(_augurOrderData.orderType), _amount, _order.makerAddress, _tradeGroupId, _affiliateAddress, _taker, _extraData);
         return _amount;
     }
 

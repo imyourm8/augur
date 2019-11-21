@@ -45,6 +45,13 @@ def test_basic_trading(contractsFixture, cash, market, universe):
     # Lets take the order as another user and confirm assets are traded
     assert cash.faucet(fix(1, 60))
     assert cash.faucet(fix(1, 40), sender=contractsFixture.accounts[1])
+
+    exitId = AugurPredicate.initializeForExit(market.address, sender=contractsFixture.accounts[1])
+    _shareToken, _cash = AugurPredicate.lookupExit(exitId)
+    print("shareToken", _shareToken, _cash)
+    # assert cash.faucet(fix(1, 60))
+    # assert cash.faucet(fix(1, 40), sender=contractsFixture.accounts[1])
+
     with TokenDelta(cash, -fix(1, 60), contractsFixture.accounts[0], "Tester 0 cash not taken"):
         with TokenDelta(cash, -fix(1, 40), contractsFixture.accounts[1], "Tester 1 cash not taken"):
             with PrintGasUsed(contractsFixture, "AugurPredicate.trade", 0):

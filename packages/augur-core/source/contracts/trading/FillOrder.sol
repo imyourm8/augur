@@ -1,5 +1,4 @@
 pragma solidity 0.5.10;
-pragma experimental ABIEncoderV2;
 
 
 import 'ROOT/trading/IFillOrder.sol';
@@ -254,6 +253,7 @@ library Trade {
         return true;
     }
 
+
     function tradeMakerTokensForFillerTokens(Data memory _data) internal returns (uint256) {
         uint256 _numberOfCompleteSets = _data.creator.sharesToBuy.min(_data.filler.sharesToBuy);
         if (_numberOfCompleteSets == 0) {
@@ -491,11 +491,12 @@ contract FillOrder is Initializable, ReentrancyGuard, IFillOrder {
         return fillOrderInternal(_filler, _tradeData, _amountFillerWants, _tradeGroupId);
     }
 
-    function fillZeroXOrder(IMarket _market, uint256 _outcome, IERC20 _kycToken, uint256 _price, Order.Types _orderType, uint256 _amount, address _creator, bytes32 _tradeGroupId, address _affiliateAddress, address _filler, bytes calldata _extraData) external returns (uint256) {
+    // Removing a variable (_affiliateAddress) to avoid stack too deep
+    function fillZeroXOrder(IMarket _market, uint256 _outcome, IERC20 _kycToken, uint256 _price, Order.Types _orderType, uint256 _amount, address _creator, bytes32 _tradeGroupId, address _filler, bytes calldata _extraData) external returns (uint256) {
         require(msg.sender == zeroXTrade, "fillZeroXOrder: Not Authorized");
         updateStoredContracts(_extraData);
         Trade.OrderData memory _orderData = Trade.createOrderData(storedContracts.shareToken, _market, _outcome, _kycToken, _price, _orderType, _amount, _creator);
-        Trade.Data memory _tradeData = Trade.createWithData(storedContracts, _orderData, _filler, _amount, _affiliateAddress);
+        Trade.Data memory _tradeData = Trade.createWithData(storedContracts, _orderData, _filler, _amount, address(0x0));
         return fillOrderInternal(_filler, _tradeData, _amount, _tradeGroupId);
     }
 

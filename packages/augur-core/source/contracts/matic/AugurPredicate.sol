@@ -12,10 +12,15 @@ import { IExchange } from "ROOT/external/IExchange.sol";
 import { ZeroXTrade } from "ROOT/trading/ZeroXTrade.sol";
 import { IAugurTrading } from "ROOT/trading/IAugurTrading.sol";
 import { IAugur } from "ROOT/IAugur.sol";
+import { Cash } from "ROOT/Cash.sol";
+
 
 contract AugurPredicate {
     using RLPReader for bytes;
     using RLPReader for RLPReader.RLPItem;
+
+    bytes32 constant SHARE_TOKEN_BALANCE_CHANGED_EVENT_SIG = 0x350ea32dc29530b9557420816d743c436f8397086f98c96292138edd69e01cb3;
+    uint256 MAX_LOGS = 10;
 
     Registry public registry;
 
@@ -36,6 +41,77 @@ contract AugurPredicate {
         // This ShareToken is the real slim shady
         shareToken = ShareToken(_augur.lookup("ShareToken"));
         zeroXTrade = ZeroXTrade(_augurTrading.lookup("ZeroXTrade"));
+    }
+
+    function initializeForExit(address market) external returns(uint256 exitId) {
+        exitId = getExitId(market, msg.sender);
+        // initialize with the normal cash for now, but intention is to deploy a new cash contract
+        address cash = augur.lookup("Cash");
+        // Cash cash = new Cash();
+        // cash.initialize(augur);
+        // ask the actual mainnet augur ShareToken for the market details
+        (uint256 _numOutcomes, uint256 _numTicks) = shareToken.markets(market);
+
+        IShareToken _shareToken = new ShareToken();
+        _shareToken.initializeFromPredicate(augur, address(cash));
+        _shareToken.initializeMarket(IMarket(market), _numOutcomes, _numTicks);
+
+        lookupExit[exitId] = ExitData({
+            shareToken: address(_shareToken),
+            cash: address(cash)
+        });
+    }
+
+    /**
+     * @notice Prove receipt and index of the log (ShareTokenBalanceChanged) in the receipt to claim balance from Matic
+     * @param data RLP encoded data of the reference tx (proof-of-funds) that encodes the following fields
+      * headerNumber Header block number of which the reference tx was a part of
+      * blockProof Proof that the block header (in the child chain) is a leaf in the submitted merkle root
+      * blockNumber Block number of which the reference tx is a part of
+      * blockTime Reference tx block time
+      * blocktxRoot Transactions root of block
+      * blockReceiptsRoot Receipts root of block
+      * receipt Receipt of the reference transaction
+      * receiptProof Merkle proof of the reference receipt
+      * branchMask Merkle proof branchMask for the receipt
+      * logIndex Log Index to read from the receipt
+     */
+    function claimBalance(bytes calldata data) external {
+        RLPReader.RLPItem[] memory referenceTxData = data.toRlpItem().toList();
+        bytes memory receipt = referenceTxData[6].toBytes();
+        RLPReader.RLPItem[] memory inputItems = receipt.toRlpItem().toList();
+        uint256 logIndex = referenceTxData[9].toUint();
+        require(logIndex < MAX_LOGS, "Supporting a max of 10 logs");
+        // uint256 age = withdrawManager.verifyInclusion(data, 0 /* offset */, false /* verifyTxInclusion */);
+        inputItems = inputItems[3].toList()[logIndex].toList(); // select log based on given logIndex
+        bytes memory logData = inputItems[2].toBytes();
+        inputItems = inputItems[1].toList(); // topics
+        // now, inputItems[i] refers to i-th (0-based) topic in the topics array
+        // event ShareTokenBalanceChanged(address indexed universe, address indexed account, address indexed market, uint256 outcome, uint256 balance);
+        require(
+            bytes32(inputItems[0].toUint()) == SHARE_TOKEN_BALANCE_CHANGED_EVENT_SIG,
+            "ShareToken.claimBalance: Not ShareTokenBalanceChanged event signature"
+        );
+        // @todo is Universe relevent?
+        address account = address(inputItems[2].toUint());
+        address market = address(inputItems[3].toUint());
+        uint256 outcome = inputItems[4].toUint();
+        uint256 balance = inputItems[5].toUint();
+        uint256 exitId = getExitId(market, msg.sender);
+        require(
+            lookupExit[exitId].shareToken != address(0x0),
+            "Predicate.trade: Please call initializeForExit first"
+        );
+        ShareToken(lookupExit[exitId].shareToken).mint(msg.sender, market, outcome, balance);
+    }
+
+    function claimBalanceFaucet(address to, address market, uint256 outcome, uint256 balance) external {
+       uint256 exitId = getExitId(market, msg.sender);
+        require(
+            lookupExit[exitId].shareToken != address(0x0),
+            "Predicate.trade: Please call initializeForExit first"
+        );
+        ShareToken(lookupExit[exitId].shareToken).mint(to, market, outcome, balance);
     }
 
     /**
@@ -60,9 +136,10 @@ contract AugurPredicate {
         );
         ZeroXTrade.AugurOrderData memory _augurOrderData = zeroXTrade.parseOrderData(_orders[0]);
         uint256 exitId = getExitId(_augurOrderData.marketAddress, msg.sender);
-        if (lookupExit[exitId].shareToken == address(0x0)) {
-            initializeForExit(exitId, _augurOrderData.marketAddress);
-        }
+        require(
+            lookupExit[exitId].shareToken != address(0x0),
+            "Predicate.trade: Please call initializeForExit first"
+        );
         zeroXTrade.trade.value(msg.value)(
             _requestedFillAmount,
             _affiliateAddress,
@@ -75,21 +152,5 @@ contract AugurPredicate {
 
     function getExitId(address _market, address _exitor) public pure returns(uint256 _exitId) {
         _exitId = uint256(keccak256(abi.encodePacked(_market, _exitor)));
-    }
-
-    function initializeForExit(uint256 exitId, address market) internal {
-        // initialize with the normal cash for now, but intention is to deploy a new cash contract
-        address cash = augur.lookup("Cash");
-        // ask the actual mainnet augur ShareToken for the market details
-        (uint256 _numOutcomes, uint256 _numTicks) = shareToken.markets(market);
-
-        IShareToken _shareToken = new ShareToken();
-        _shareToken.initializeFromPredicate(augur, cash);
-        _shareToken.initializeMarket(IMarket(market), _numOutcomes, _numTicks);
-
-        lookupExit[exitId] = ExitData({
-            shareToken: address(_shareToken),
-            cash: cash
-        });
     }
 }
