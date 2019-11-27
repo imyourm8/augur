@@ -87,3 +87,5 @@ tests/compilation_cache/
 
 /node_modules/
 /output/
+test/deployedAddresses
+test/addresses.json
