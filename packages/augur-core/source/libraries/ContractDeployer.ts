@@ -23,6 +23,7 @@ import {
     ZeroXTrade,
     GnosisSafeRegistry,
     WarpSync,
+    AugurPredicate
 } from './ContractInterfaces';
 import { NetworkConfiguration } from './NetworkConfiguration';
 import { Contracts, ContractData } from './Contracts';
@@ -72,6 +73,7 @@ Deploying to: ${networkConfiguration.networkName}
         this.augur = await this.uploadAugur();
         this.augurTrading = await this.uploadAugurTrading();
         await this.uploadAllContracts();
+        await this.uploadAugurPredicate();
 
         const externalAddresses = this.configuration.externalAddresses;
 
@@ -261,6 +263,16 @@ Deploying to: ${networkConfiguration.networkName}
         return augurTrading;
     }
 
+    private async uploadAugurPredicate() {
+      console.log('Uploading augur Predicate...');
+      const contract = await this.contracts.get("AugurPredicate");
+      const address = await this.construct(contract, []);
+      contract.address = address;
+      // const augurPredicate = new AugurPredicate(this.dependencies, address);
+      console.log(`Augur Predicate address: ${address}`);
+      // return augurPredicate;
+    }
+
     private async uploadTestDaiContracts(): Promise<void> {
         const cashContract = await this.contracts.get('Cash');
         cashContract.address = await this.uploadAndAddToAugur(cashContract, 'Cash', []);
@@ -338,6 +350,7 @@ Deploying to: ${networkConfiguration.networkName}
         if (contractName === 'ReputationTokenFactory') contract = this.configuration.isProduction ? contract : this.contracts.get('TestNetReputationTokenFactory');
         if (contract.relativeFilePath.startsWith('legacy_reputation/')) return;
         if (contractName === 'LegacyReputationToken') return;
+        if (contractName === 'AugurPredicate') return;
         if (contractName === 'Cash') return;
         if (contractName === 'RepPriceOracle') return;
         if (contractName === 'CashFaucet') return;
@@ -393,7 +406,7 @@ Deploying to: ${networkConfiguration.networkName}
         const tradeContract = await this.getContractAddress('Trade');
         const trade = new Trade(this.dependencies, tradeContract);
         promises.push(trade.initialize(this.augur!.address, this.augurTrading!.address));
-
+        
         const ordersContract = await this.getContractAddress('Orders');
         const orders = new Orders(this.dependencies, ordersContract);
         promises.push(orders.initialize(this.augur!.address, this.augurTrading!.address));
@@ -409,6 +422,10 @@ Deploying to: ${networkConfiguration.networkName}
         const ZeroXTradeContract = await this.getContractAddress('ZeroXTrade');
         const zeroXTrade = new ZeroXTrade(this.dependencies, ZeroXTradeContract);
         promises.push(zeroXTrade.initialize(this.augur!.address, this.augurTrading!.address));
+
+        const augurPredicateContract = await this.getContractAddress('AugurPredicate');
+        const augurPredicate = new AugurPredicate(this.dependencies, augurPredicateContract);
+        promises.push(augurPredicate.initialize(this.augur!.address, this.augurTrading!.address));
 
         const GnosisSafeRegistryContract = await this.getContractAddress('GnosisSafeRegistry');
         const gnosisSafeRegistry = new GnosisSafeRegistry(this.dependencies, GnosisSafeRegistryContract);

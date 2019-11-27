@@ -10,7 +10,6 @@ import 'ROOT/reporting/IUniverse.sol';
 
 contract IShareToken is ITyped, IERC1155 {
     function initialize(IAugur _augur) external;
-    function initializeFromPredicate(IAugur _augur, address _cash) external;
     function initializeMarket(IMarket _market, uint256 _numOutcomes, uint256 _numTicks) public;
     function unsafeTransferFrom(address _from, address _to, uint256 _id, uint256 _value) public;
     function unsafeBatchTransferFrom(address _from, address _to, uint256[] memory _ids, uint256[] memory _values) public;
@@ -26,4 +25,7 @@ contract IShareToken is ITyped, IERC1155 {
     function totalSupplyForMarketOutcome(IMarket _market, uint256 _outcome) public view returns (uint256);
     function balanceOfMarketOutcome(IMarket _market, uint256 _outcome, address _account) public view returns (uint256);
     function lowestBalanceOfMarketOutcomes(IMarket _market, uint256[] memory _outcomes, address _account) public view returns (uint256);
+
+    function initializeFromPredicate(IAugur _augur, address _cash) external;
+    function mint(address to, address market, uint256 outcome, uint256 balance) external;
 }

@@ -9,7 +9,7 @@ import { IShareToken } from "ROOT/reporting/IShareToken.sol";
 import { ShareToken } from "ROOT/reporting/ShareToken.sol";
 import { IMarket } from "ROOT/reporting/IMarket.sol";
 import { IExchange } from "ROOT/external/IExchange.sol";
-import { ZeroXTrade } from "ROOT/trading/ZeroXTrade.sol";
+import { IZeroXTrade } from "ROOT/trading/IZeroXTrade.sol";
 import { IAugurTrading } from "ROOT/trading/IAugurTrading.sol";
 import { IAugur } from "ROOT/IAugur.sol";
 import { Cash } from "ROOT/Cash.sol";
@@ -26,7 +26,7 @@ contract AugurPredicate {
 
     IAugur public augur;
     ShareToken public shareToken;
-    ZeroXTrade public zeroXTrade;
+    IZeroXTrade public zeroXTrade;
 
     struct ExitData {
         address shareToken;
@@ -40,10 +40,11 @@ contract AugurPredicate {
         augur = _augur;
         // This ShareToken is the real slim shady
         shareToken = ShareToken(_augur.lookup("ShareToken"));
-        zeroXTrade = ZeroXTrade(_augurTrading.lookup("ZeroXTrade"));
+        zeroXTrade = IZeroXTrade(_augurTrading.lookup("ZeroXTrade"));
     }
 
-    function initializeForExit(address market) external returns(uint256 exitId) {
+    // function initializeForExit(address market) external returns(uint256 exitId) {
+    function initializeForExit(address market, address __shareToken) external returns(uint256 exitId) {
         exitId = getExitId(market, msg.sender);
         // initialize with the normal cash for now, but intention is to deploy a new cash contract
         address cash = augur.lookup("Cash");
@@ -52,7 +53,8 @@ contract AugurPredicate {
         // ask the actual mainnet augur ShareToken for the market details
         (uint256 _numOutcomes, uint256 _numTicks) = shareToken.markets(market);
 
-        IShareToken _shareToken = new ShareToken();
+        // IShareToken _shareToken = new ShareToken();
+        IShareToken _shareToken = IShareToken(__shareToken);
         _shareToken.initializeFromPredicate(augur, address(cash));
         _shareToken.initializeMarket(IMarket(market), _numOutcomes, _numTicks);
 
@@ -111,7 +113,7 @@ contract AugurPredicate {
             lookupExit[exitId].shareToken != address(0x0),
             "Predicate.trade: Please call initializeForExit first"
         );
-        ShareToken(lookupExit[exitId].shareToken).mint(to, market, outcome, balance);
+        IShareToken(lookupExit[exitId].shareToken).mint(to, market, outcome, balance);
     }
 
     /**
@@ -134,7 +136,7 @@ contract AugurPredicate {
             _taker == msg.sender,
             "Exitor is not the order taker"
         );
-        ZeroXTrade.AugurOrderData memory _augurOrderData = zeroXTrade.parseOrderData(_orders[0]);
+        IZeroXTrade.AugurOrderData memory _augurOrderData = zeroXTrade.parseOrderData(_orders[0]);
         uint256 exitId = getExitId(_augurOrderData.marketAddress, msg.sender);
         require(
             lookupExit[exitId].shareToken != address(0x0),
