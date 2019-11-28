@@ -1,6 +1,6 @@
-## Setup
+### Setup
+:one: `cd augur`
 ```
-cd augur
 nvm use 10
 yarn
 yarn build:watch
@@ -9,15 +9,14 @@ yarn docker:geth:pop-normal-time
 ```
 Pick deployed contract addresses from [here](https://github.com/AugurProject/augur/blob/master/packages/augur-artifacts/src/addresses.json); abis [here](https://github.com/AugurProject/augur/blob/master/packages/augur-artifacts/src/abi.json).
 
-## Deploy Augur contracts
+:two: `cd packages/augur-core`
+
 ```
-cd packages/augur-core
 yarn
-yarn deploy:local > test/deployedAddresses
-node test/addressClipper.js
 ```
 
-## Run Test
+## Deploy contracts and call `Predicate.trade`
 ```
-node test/zeroXTrade.js
+bash test/run.sh
 ```
+

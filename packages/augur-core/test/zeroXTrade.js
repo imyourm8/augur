@@ -1,6 +1,7 @@
 var Web3 = require('web3');
 var web3 = new Web3('ws://localhost:8546');
 const abis = require('../output/contracts/abi.json')
+const contracts = require('../output/contracts/contracts.json')
 const addresses = require('./addresses.json')
 const augurHelper = require('./AugurHelper')
 const { signatureUtils } = require('0x.js')

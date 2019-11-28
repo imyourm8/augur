@@ -8,6 +8,7 @@ import 'ROOT/libraries/Initializable.sol';
 import 'ROOT/reporting/IMarket.sol';
 import 'ROOT/trading/IProfitLoss.sol';
 import 'ROOT/IAugur.sol';
+import 'ROOT/ICash.sol';
 
 /**
  * @title Share Token
@@ -32,8 +33,6 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
     address public cancelOrder;
     IProfitLoss public profitLoss;
 
-    mapping(address => bool) private doesNotUpdatePnl;
-
     function initialize(IAugur _augur) public beforeInitialized {
         endInitialization();
         augur = _augur;
@@ -42,19 +41,15 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
         address _fillOrder = _augur.lookup("FillOrder");
         address _cancelOrder = _augur.lookup("CancelOrder");
 
-        doesNotUpdatePnl[_createOrder] = true;
-        doesNotUpdatePnl[_fillOrder] = true;
-        doesNotUpdatePnl[_cancelOrder] = true;
-
         createOrder = _createOrder;
         fillOrder = _fillOrder;
         cancelOrder = _cancelOrder;
         profitLoss = IProfitLoss(_augur.lookup("ProfitLoss"));
-        cash = ICash(_augur.lookup("Cash"));
+        // cash = ICash(_augur.lookup("Cash"));
     }
 
-    function initializeFromPredicate(IAugur _augur, address _cash) external {
-        // initialize will ensure beforeInitialized ACL
+    function initializeFromPredicate(IAugur _augur, address _cash) external /* @todo onlyPredicate */ {
+        // initialize will ensure beforeInitialized validation
         initialize(_augur);
         cash = ICash(_cash);
     }

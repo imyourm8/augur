@@ -13,9 +13,9 @@ import { IZeroXTrade } from "ROOT/trading/IZeroXTrade.sol";
 import { IAugurTrading } from "ROOT/trading/IAugurTrading.sol";
 import { IAugur } from "ROOT/IAugur.sol";
 import { Cash } from "ROOT/Cash.sol";
+import { Initializable } from "ROOT/libraries/Initializable.sol";
 
-
-contract AugurPredicate {
+contract AugurPredicate is Initializable {
     using RLPReader for bytes;
     using RLPReader for RLPReader.RLPItem;
 
@@ -35,33 +35,35 @@ contract AugurPredicate {
 
     mapping(uint256 => ExitData) public lookupExit;
 
-    function initialize(IAugur _augur, IAugurTrading _augurTrading) public /* @todo beforeInitialized */ {
-        // endInitialization();
+    function initialize(IAugur _augur, IAugurTrading _augurTrading) public beforeInitialized {
+        endInitialization();
         augur = _augur;
-        // This ShareToken is the real slim shady
+        // This ShareToken is the real slim shady (from mainnet augur)
         shareToken = ShareToken(_augur.lookup("ShareToken"));
         zeroXTrade = IZeroXTrade(_augurTrading.lookup("ZeroXTrade"));
     }
 
+    /**
+     * @notice Call initializeForExit to instantiate new shareToken and Cash contracts to replay history from Matic
+     * @dev new ShareToken() / new Cash() causes the bytecode of this contract to be too large, working around that limitation for now,
+        however, the intention is to deploy a new ShareToken and Cash contract per exit
+     * @param market Market address to start the exit for
+     */
     // function initializeForExit(address market) external returns(uint256 exitId) {
-    function initializeForExit(address market, address __shareToken) external returns(uint256 exitId) {
+    function initializeForExit(address market, address shareToken_, address cash_) external returns(uint256 exitId) {
         exitId = getExitId(market, msg.sender);
-        // initialize with the normal cash for now, but intention is to deploy a new cash contract
-        address cash = augur.lookup("Cash");
-        // Cash cash = new Cash();
-        // cash.initialize(augur);
-        // ask the actual mainnet augur ShareToken for the market details
-        (uint256 _numOutcomes, uint256 _numTicks) = shareToken.markets(market);
 
         // IShareToken _shareToken = new ShareToken();
-        IShareToken _shareToken = IShareToken(__shareToken);
-        _shareToken.initializeFromPredicate(augur, address(cash));
+        // Cash cash = new Cash();
+        // cash.initialize(augur);
+
+        IShareToken _shareToken = IShareToken(shareToken_);
+        _shareToken.initializeFromPredicate(augur, cash_);
+        // ask the actual mainnet augur ShareToken for the market details
+        (uint256 _numOutcomes, uint256 _numTicks) = shareToken.markets(market);
         _shareToken.initializeMarket(IMarket(market), _numOutcomes, _numTicks);
 
-        lookupExit[exitId] = ExitData({
-            shareToken: address(_shareToken),
-            cash: address(cash)
-        });
+        lookupExit[exitId] = ExitData({ shareToken: shareToken_, cash: cash_ });
     }
 
     /**
