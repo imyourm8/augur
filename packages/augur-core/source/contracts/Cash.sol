@@ -113,7 +113,7 @@ contract Cash is ITyped, ICash, ICashFaucet {
     }
 
     function faucet(uint256 _amount) public returns (bool) {
-        daiVat.faucet(address(daiJoin), _amount * DAI_ONE);
+        // daiVat.faucet(address(daiJoin), _amount * DAI_ONE);
         mint(msg.sender, _amount);
         return true;
     }
