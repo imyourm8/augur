@@ -1338,7 +1338,7 @@ contract ZeroXExchange is IExchange, ReentrancyGuard {
         for (uint256 i = 0; i != length; i++) {
             // We write the scaled values to an unused location in memory in order
             // to avoid copying over `ids` or `data`. This is possible if they are
-            // identical to `values` and the offsets for each are pointing to the 
+            // identical to `values` and the offsets for each are pointing to the
             // same location in the ABI encoded calldata.
             scaledValues[i] = values[i].mul(amount);
         }
@@ -1420,7 +1420,7 @@ contract ZeroXExchange is IExchange, ReentrancyGuard {
             to <= b.length,
             "TO_LESS_THAN_LENGTH_REQUIRED"
         );
-        
+
         // Create a new bytes structure around [from, to) in-place.
         assembly {
             result := add(b, from)
