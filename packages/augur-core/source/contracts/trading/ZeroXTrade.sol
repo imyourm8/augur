@@ -274,8 +274,8 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
         if (_order.makerAddress == _taker) {
             return 0;
         }
+        (_augurOrderData.marketAddress,,) = registry.childToRootMarket(_augurOrderData.marketAddress);
         fillOrder.fillZeroXOrder(IMarket(_augurOrderData.marketAddress), _augurOrderData.outcome, IERC20(_augurOrderData.kycToken), _augurOrderData.price, Order.Types(_augurOrderData.orderType), _amount, _order.makerAddress, _tradeGroupId, _taker, _extraData);
-        // fillOrder.fillZeroXOrder(IMarket(_augurOrderData.marketAddress), _augurOrderData.outcome, IERC20(_augurOrderData.kycToken), _augurOrderData.price, Order.Types(_augurOrderData.orderType), _amount, _order.makerAddress, _tradeGroupId, _affiliateAddress, _taker, _extraData);
         return _amount;
     }
 

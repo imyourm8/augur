@@ -69,7 +69,7 @@ contract AugurPredicate is Initializable {
         IShareToken _shareToken = IShareToken(shareToken_);
         _shareToken.initializeFromPredicate(augur, cash_);
         // ask the actual mainnet augur ShareToken for the market details
-        _shareToken.initializeMarket(IMarket(market) /* child market */, _numOutcomes, _numTicks);
+        _shareToken.initializeMarket(IMarket(_rootMarket), _numOutcomes, _numTicks);
 
         lookupExit[exitId] = ExitData({ shareToken: shareToken_, cash: cash_ });
     }
