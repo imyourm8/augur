@@ -211,10 +211,12 @@ contract ERC1155 is ERC165, IERC1155 {
     {
         require(ids.length == values.length, "ERC1155: IDs and values must have same lengths");
         require(to != address(0), "ERC1155: target address must be non-zero");
-        require(
-            from == msg.sender || isApprovedForAll(from, msg.sender) == true,
-            "ERC1155: need operator approval for 3rd party transfers"
-        );
+
+        // Bypass approvals for the matic sandbox
+        // require(
+        //     from == msg.sender || isApprovedForAll(from, msg.sender) == true,
+        //     "ERC1155: need operator approval for 3rd party transfers"
+        // );
 
         _internalBatchTransferFrom(from, to, ids, values, data, doAcceptanceCheck);
     }

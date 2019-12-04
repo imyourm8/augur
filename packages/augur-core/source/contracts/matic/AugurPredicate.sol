@@ -43,6 +43,10 @@ contract AugurPredicate is Initializable {
         zeroXTrade = IZeroXTrade(_augurTrading.lookup("ZeroXTrade"));
     }
 
+    function setRegistry(address _registry) public /* @todo make part of initialize() */ {
+        registry = Registry(_registry);
+    }
+
     /**
      * @notice Call initializeForExit to instantiate new shareToken and Cash contracts to replay history from Matic
      * @dev new ShareToken() / new Cash() causes the bytecode of this contract to be too large, working around that limitation for now,
@@ -51,6 +55,11 @@ contract AugurPredicate is Initializable {
      */
     // function initializeForExit(address market) external returns(uint256 exitId) {
     function initializeForExit(address market, address shareToken_, address cash_) external returns(uint256 exitId) {
+        (address _rootMarket, uint256 _numOutcomes, uint256 _numTicks) = registry.childToRootMarket(market);
+        require(
+            _rootMarket != address(0x0),
+            "AugurPredicate:initializeForExit: Market is not mapped"
+        );
         exitId = getExitId(market, msg.sender);
 
         // IShareToken _shareToken = new ShareToken();
@@ -60,8 +69,7 @@ contract AugurPredicate is Initializable {
         IShareToken _shareToken = IShareToken(shareToken_);
         _shareToken.initializeFromPredicate(augur, cash_);
         // ask the actual mainnet augur ShareToken for the market details
-        (uint256 _numOutcomes, uint256 _numTicks) = shareToken.markets(market);
-        _shareToken.initializeMarket(IMarket(market), _numOutcomes, _numTicks);
+        _shareToken.initializeMarket(IMarket(market) /* child market */, _numOutcomes, _numTicks);
 
         lookupExit[exitId] = ExitData({ shareToken: shareToken_, cash: cash_ });
     }
