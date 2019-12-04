@@ -134,7 +134,7 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
     function totalSupply(uint256 id) external view returns (uint256) {
         return 0;
     }
-    
+
     function bidBalance(address _owner, IMarket _market, uint8 _outcome, uint256 _price) public view returns (uint256) {
         (,uint256 _numberOfOutcomes,) = registry.childToRootMarket(address(_market));
         // Figure out how many almost-complete-sets (just missing `outcome` share) the creator has
@@ -251,7 +251,6 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
         (IERC1155 _zeroXTradeTokenTaker, uint256 _tokenIdTaker) = getZeroXTradeTokenData(_order.takerAssetData);
         require(_zeroXTradeToken == _zeroXTradeTokenTaker, "_zeroXTradeToken != _zeroXTradeTokenTaker");
         require(_tokenId == _tokenIdTaker, "_tokenId != _tokenIdTaker");
-        // require(_zeroXTradeToken == this, "_zeroXTradeToken != this");
         require(address(_zeroXTradeToken) == registry.zeroXTrade(), "_zeroXTradeToken != registry.zeroXTrade");
     }
 
