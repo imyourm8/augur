@@ -15,6 +15,7 @@ export const NETWORKS = [
   'aura',
   'clique',
   'environment',
+  'matic',
   'rinkeby',
   'ropsten',
   'kovan',
@@ -102,6 +103,17 @@ const networks: NetworksToOptions = {
       ? new ethers.utils.BigNumber(20)
       : new ethers.utils.BigNumber(process.env.ETHEREUM_GAS_PRICE_IN_NANOETH!)
     ).mul(new ethers.utils.BigNumber(1000000000)),
+    gasLimit:
+      typeof process.env.ETHEREUM_GAS_LIMIT === 'undefined'
+        ? new ethers.utils.BigNumber(7500000)
+        : new ethers.utils.BigNumber(process.env.ETHEREUM_GAS_LIMIT),
+  },
+  matic: {
+    isProduction: process.env.PRODUCTION === "true" || false,
+    http: "http://localhost:8547",
+    ws: "ws://localhost:8548",
+    privateKey: process.env.ETHEREUM_PRIVATE_KEY || "fae42052f82bed612a724fec3632f325f377120592c75bb78adfcceae6470c5a",
+    gasPrice: ((typeof process.env.ETHEREUM_GAS_PRICE_IN_NANOETH === "undefined") ? new ethers.utils.BigNumber(20) : new ethers.utils.BigNumber(process.env.ETHEREUM_GAS_PRICE_IN_NANOETH!)).mul(new ethers.utils.BigNumber(1000000000)),
     gasLimit:
       typeof process.env.ETHEREUM_GAS_LIMIT === 'undefined'
         ? new ethers.utils.BigNumber(7500000)
