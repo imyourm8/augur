@@ -6,6 +6,7 @@ import 'ROOT/libraries/ReentrancyGuard.sol';
 import 'ROOT/external/IWallet.sol';
 import 'ROOT/libraries/math/SafeMathUint256.sol';
 import 'ROOT/libraries/token/IERC1155.sol';
+import { Registry } from "ROOT/matic/Registry.sol";
 
 
 contract ZeroXExchange is IExchange, ReentrancyGuard {
@@ -95,6 +96,8 @@ contract ZeroXExchange is IExchange, ReentrancyGuard {
     // Orders with specified senderAddress and with a salt less than their epoch are considered cancelled
     mapping (address => mapping (address => uint256)) public orderEpoch;
 
+    Registry public registry;
+
     constructor ()
         public
     {
@@ -105,6 +108,10 @@ contract ZeroXExchange is IExchange, ReentrancyGuard {
             keccak256(bytes(EIP712_DOMAIN_VERSION)),
             uint256(address(this))
         ));
+    }
+
+    function setRegistry(address _registry) public /* @todo make part of constructor */ {
+        registry = Registry(_registry);
     }
 
     /// @dev Adds properties of both FillResults instances.
@@ -130,12 +137,21 @@ contract ZeroXExchange is IExchange, ReentrancyGuard {
     function fillOrderNoThrow(
         Order memory order,
         uint256 takerAssetFillAmount,
-        bytes memory signature
+        bytes memory signature,
+        address exchange
     )
         public
         payable
         returns (FillResults memory fillResults)
     {
+        EIP712_DOMAIN_HASH = keccak256(
+            abi.encodePacked(
+            EIP712_DOMAIN_SEPARATOR_SCHEMA_HASH,
+            keccak256(bytes(EIP712_DOMAIN_NAME)),
+            keccak256(bytes(EIP712_DOMAIN_VERSION)),
+            uint256(exchange)
+        ));
+
         // ABI encode calldata for `fillOrder`
         bytes memory fillOrderCalldata = abiEncodeFillOrder(
             order,
@@ -1331,6 +1347,9 @@ contract ZeroXExchange is IExchange, ReentrancyGuard {
     {
         // Decode params from `assetData`
         (address erc1155TokenAddress, uint256[] memory ids, uint256[] memory values, bytes memory data) = abi.decode(sliceDestructive(assetData, 4, assetData.length), (address, uint256[], uint256[], bytes));
+
+        // order data encodes the zeroxTrade on child whereas we need the one on root
+        erc1155TokenAddress = registry.rootZeroXTrade();
 
         // Scale values up by `amount`
         uint256 length = values.length;

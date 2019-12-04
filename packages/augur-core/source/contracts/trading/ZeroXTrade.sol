@@ -134,9 +134,9 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
     function totalSupply(uint256 id) external view returns (uint256) {
         return 0;
     }
-
+    
     function bidBalance(address _owner, IMarket _market, uint8 _outcome, uint256 _price) public view returns (uint256) {
-        uint256 _numberOfOutcomes = _market.getNumberOfOutcomes();
+        (,uint256 _numberOfOutcomes,) = registry.childToRootMarket(address(_market));
         // Figure out how many almost-complete-sets (just missing `outcome` share) the creator has
         uint256[] memory _shortOutcomes = new uint256[](_numberOfOutcomes - 1);
         uint256 _indexOutcome = 0;
@@ -156,8 +156,9 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
     }
 
     function askBalance(address _owner, IMarket _market, uint8 _outcome, uint256 _price) public view returns (uint256) {
+        (,,uint256 _numTicks) = registry.childToRootMarket(address(_market));
         uint256 _attoSharesOwned = shareToken.balanceOfMarketOutcome(_market, _outcome, _owner);
-        uint256 _attoSharesPurchasable = cash.balanceOf(_owner).div(_market.getNumTicks().sub(_price));
+        uint256 _attoSharesPurchasable = cash.balanceOf(_owner).div(_numTicks.sub(_price));
 
         return _attoSharesOwned.add(_attoSharesPurchasable);
     }
@@ -182,7 +183,6 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
     }
 
     // Trade functions
-    event DEBUG(address indexed a);
 
     /**
      * Perform Augur Trades using 0x signed orders
@@ -219,15 +219,14 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
         for (uint256 i = 0; i < _orders.length && _fillAmountRemaining != 0; i++) {
             IExchange.Order memory _order = _orders[i];
             validateOrder(_order);
-            // IExchange _exchange = getExchangeFromAssetData(_order.makerAssetData);
-            IExchange _exchange = IExchange(registry.zeroXExchange());
-            emit DEBUG(address(_exchange));
-
+            IExchange _maticExchange = getExchangeFromAssetData(_order.makerAssetData);
             // Update 0x and pay protocol fee. This will also validate signatures and order state for us.
-            IExchange.FillResults memory totalFillResults = _exchange.fillOrderNoThrow.value(150000 * tx.gasprice)(
+            IExchange.FillResults memory totalFillResults = IExchange(registry.zeroXExchange(address(_maticExchange)))
+            .fillOrderNoThrow.value(150000 * tx.gasprice)(
                 _order,
                 _fillAmountRemaining,
-                _signatures[i]
+                _signatures[i],
+                address(_maticExchange)
             );
 
             if (totalFillResults.takerAssetFilledAmount == 0) {
@@ -256,9 +255,17 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
         require(address(_zeroXTradeToken) == registry.zeroXTrade(), "_zeroXTradeToken != registry.zeroXTrade");
     }
 
+    function updateStoredContracts(bytes memory _extraData) internal {
+        (address _shareToken, address _cash) = abi.decode(_extraData, (address, address));
+        shareToken = IShareToken(_shareToken);
+        cash = ICash(_cash);
+    }
+
     function doTrade(IExchange.Order memory _order, uint256 _amount, address _affiliateAddress, bytes32 _tradeGroupId, address _taker, bytes memory _extraData) private returns (uint256) {
         // parseOrderData will validate that the token being traded is the legitimate one for the market
         AugurOrderData memory _augurOrderData = parseOrderData(_order);
+        updateStoredContracts(_extraData);
+
         // If the signed order creator doesnt have enough funds we still want to continue and take their order out of the list
         // If the filler doesn't have funds this will just fail, which is fine
         if (!creatorHasFundsForTrade(_order, _amount)) {
