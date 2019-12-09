@@ -9,12 +9,13 @@ import 'ROOT/reporting/IMarket.sol';
 import 'ROOT/trading/IProfitLoss.sol';
 import 'ROOT/IAugur.sol';
 import 'ROOT/ICash.sol';
+import 'ROOT/matic/ExecutorAcl.sol';
 
 /**
  * @title Share Token
  * @notice ERC1155 contract to hold all Augur share token balances
  */
-contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGuard {
+contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGuard, ExecutorAcl {
 
     string constant public name = "Shares";
     string constant public symbol = "SHARE";
@@ -48,8 +49,8 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
         // cash = ICash(_augur.lookup("Cash"));
     }
 
-    function initializeFromPredicate(IAugur _augur, address _cash) external /* @todo onlyPredicate */ {
-        // initialize will ensure beforeInitialized validation
+    function initializeFromPredicate(IAugur _augur, address _cash) external onlyPredicate {
+        // call to initialize() will ensure beforeInitialized validation
         initialize(_augur);
         cash = ICash(_cash);
     }
@@ -242,8 +243,12 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
      * @param _affiliateAddress The affiliate address for the trade if one exists
      * @return (uint256 _creatorFee, uint256 _reportingFee) The fees taken for the market creator and reporting respectively
      */
-    function sellCompleteSetsForTrade(IMarket _market, uint256 _outcome, uint256 _amount, address _shortParticipant, address _longParticipant, address _shortRecipient, address _longRecipient, uint256 _price, address _affiliateAddress) external returns (uint256 _creatorFee, uint256 _reportingFee) {
-        // bypassing approvals for predicate flow
+    function sellCompleteSetsForTrade(IMarket _market, uint256 _outcome, uint256 _amount, address _shortParticipant, address _longParticipant, address _shortRecipient, address _longRecipient, uint256 _price, address _affiliateAddress)
+        external
+        isExecuting
+        returns (uint256 _creatorFee, uint256 _reportingFee) {
+
+        // bypassing approvals for predicate flow, protected by the isExecuting modifier
         // require(isApprovedForAll(_shortParticipant, msg.sender) == true, "ERC1155: need operator approval to burn short account shares");
         // require(isApprovedForAll(_longParticipant, msg.sender) == true, "ERC1155: need operator approval to burn long account shares");
 
@@ -254,7 +259,8 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
         require(cash.transfer(_longRecipient, _longPayout), "sellCompleteSetsForTrade: cash transfer failed 1");
         require(cash.transfer(_shortRecipient, _payout.sub(_longPayout)), "sellCompleteSetsForTrade: cash transfer failed 2");
 
-        _market.assertBalances();
+        // Inconsequential to assert balances on the main augur market
+        // _market.assertBalances();
         return (_creatorFee, _reportingFee);
     }
 
@@ -281,26 +287,28 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
         _payout = _amount.mul(_numTicks);
         IUniverse _universe = _market.getUniverse();
 
-        if (!_market.isFinalized()) {
-            _universe.decrementOpenInterest(_payout);
-        }
+        // if (!_market.isFinalized()) {
+        //     _universe.decrementOpenInterest(_payout);
+        // }
 
         _creatorFee = _market.deriveMarketCreatorFeeAmount(_payout);
         uint256 _reportingFeeDivisor = _universe.getOrCacheReportingFeeDivisor();
         _reportingFee = _payout.div(_reportingFeeDivisor);
         _payout = _payout.sub(_creatorFee).sub(_reportingFee);
 
-        if (_creatorFee != 0) {
-            _market.recordMarketCreatorFees(_creatorFee, _affiliateAddress);
-        }
+        // @todo handle market creator and reporter fee properly, if applicable
 
-        _universe.withdraw(address(this), _payout.add(_reportingFee), address(_market));
+        // if (_creatorFee != 0) {
+        //     _market.recordMarketCreatorFees(_creatorFee, _affiliateAddress);
+        // }
 
-        if (_reportingFee != 0) {
-            require(cash.transfer(address(_universe.getOrCreateNextDisputeWindow(false)), _reportingFee));
-        }
+        // _universe.withdraw(address(this), _payout.add(_reportingFee), address(_market));
 
-        augur.logMarketOIChanged(_universe, _market);
+        // if (_reportingFee != 0) {
+        //     require(cash.transfer(address(_universe.getOrCreateNextDisputeWindow(false)), _reportingFee));
+        // }
+
+        // augur.logMarketOIChanged(_universe, _market);
     }
 
     /**

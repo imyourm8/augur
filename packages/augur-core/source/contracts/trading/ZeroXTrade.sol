@@ -136,7 +136,7 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
     }
 
     function bidBalance(address _owner, IMarket _market, uint8 _outcome, uint256 _price) public view returns (uint256) {
-        (,uint256 _numberOfOutcomes,) = registry.childToRootMarket(address(_market));
+        uint256 _numberOfOutcomes = _market.getNumberOfOutcomes();
         // Figure out how many almost-complete-sets (just missing `outcome` share) the creator has
         uint256[] memory _shortOutcomes = new uint256[](_numberOfOutcomes - 1);
         uint256 _indexOutcome = 0;
@@ -156,9 +156,8 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
     }
 
     function askBalance(address _owner, IMarket _market, uint8 _outcome, uint256 _price) public view returns (uint256) {
-        (,,uint256 _numTicks) = registry.childToRootMarket(address(_market));
         uint256 _attoSharesOwned = shareToken.balanceOfMarketOutcome(_market, _outcome, _owner);
-        uint256 _attoSharesPurchasable = cash.balanceOf(_owner).div(_numTicks.sub(_price));
+        uint256 _attoSharesPurchasable = cash.balanceOf(_owner).div(_market.getNumTicks().sub(_price));
 
         return _attoSharesOwned.add(_attoSharesPurchasable);
     }
@@ -281,6 +280,9 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
 
     function creatorHasFundsForTrade(IExchange.Order memory _order, uint256 _amount) public view returns (bool) {
         uint256 _tokenId = getTokenIdFromOrder(_order);
+        (address _market, uint256 _price, uint8 _outcome, uint8 _type) = unpackTokenId(_tokenId);
+        (address _rootmarket,,) = registry.childToRootMarket(_market);
+        _tokenId = getTokenId(_rootmarket, _price, _outcome, _type);
         return _amount <= this.balanceOf(_order.makerAddress, _tokenId);
     }
 
