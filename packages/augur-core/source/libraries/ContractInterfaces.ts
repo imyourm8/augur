@@ -5,6 +5,8 @@ export class Contract extends c.Contract<BigNumber> {
 }
 export class Augur extends c.Augur<BigNumber> {
 }
+export class AugurPredicate extends c.AugurPredicate<BigNumber> {
+}
 export class Cash extends c.Cash<BigNumber> {
 }
 export class CashFaucet extends c.CashFaucet<BigNumber> {

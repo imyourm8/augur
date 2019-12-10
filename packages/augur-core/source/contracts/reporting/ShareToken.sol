@@ -8,13 +8,14 @@ import 'ROOT/libraries/Initializable.sol';
 import 'ROOT/reporting/IMarket.sol';
 import 'ROOT/trading/IProfitLoss.sol';
 import 'ROOT/IAugur.sol';
-
+import 'ROOT/ICash.sol';
+import 'ROOT/matic/ExecutorAcl.sol';
 
 /**
  * @title Share Token
  * @notice ERC1155 contract to hold all Augur share token balances
  */
-contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGuard {
+contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGuard, ExecutorAcl {
 
     string constant public name = "Shares";
     string constant public symbol = "SHARE";
@@ -24,7 +25,7 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
         uint256 numTicks;
     }
 
-    mapping(address => MarketData) markets;
+    mapping(address => MarketData) public markets;
 
     IAugur public augur;
     ICash public cash;
@@ -33,9 +34,7 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
     address public cancelOrder;
     IProfitLoss public profitLoss;
 
-    mapping(address => bool) private doesNotUpdatePnl;
-
-    function initialize(IAugur _augur) external beforeInitialized {
+    function initialize(IAugur _augur) public beforeInitialized {
         endInitialization();
         augur = _augur;
 
@@ -43,15 +42,17 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
         address _fillOrder = _augur.lookup("FillOrder");
         address _cancelOrder = _augur.lookup("CancelOrder");
 
-        doesNotUpdatePnl[_createOrder] = true;
-        doesNotUpdatePnl[_fillOrder] = true;
-        doesNotUpdatePnl[_cancelOrder] = true;
-
         createOrder = _createOrder;
         fillOrder = _fillOrder;
         cancelOrder = _cancelOrder;
         profitLoss = IProfitLoss(_augur.lookup("ProfitLoss"));
-        cash = ICash(_augur.lookup("Cash"));
+        // cash = ICash(_augur.lookup("Cash"));
+    }
+
+    function initializeFromPredicate(IAugur _augur, address _cash) external onlyPredicate {
+        // call to initialize() will ensure beforeInitialized validation
+        initialize(_augur);
+        cash = ICash(_cash);
     }
 
     /**
@@ -81,8 +82,8 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
         _batchTransferFrom(_from, _to, _ids, _values, bytes(""), false);
     }
 
-    function initializeMarket(IMarket _market, uint256 _numOutcomes, uint256 _numTicks) public {
-        require (augur.isKnownUniverse(IUniverse(msg.sender)));
+    function initializeMarket(IMarket _market, uint256 _numOutcomes, uint256 _numTicks) public /* @todo onlyPredicate */ {
+        // require (augur.isKnownUniverse(IUniverse(msg.sender)));
         markets[address(_market)].numOutcomes = _numOutcomes;
         markets[address(_market)].numTicks = _numTicks;
     }
@@ -155,10 +156,13 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
 
         require(_numOutcomes != 0, "Invalid Market provided");
 
-        IUniverse _universe = _market.getUniverse();
+        // The caller (FillOrder) has pulled cash from trade participants,
+        // so let this step be, because there is no need to setup an entire universe for the matic sandbox
 
-        uint256 _cost = _amount.mul(_numTicks);
-        _universe.deposit(msg.sender, _cost, address(_market));
+        // IUniverse _universe = _market.getUniverse();
+
+        // uint256 _cost = _amount.mul(_numTicks);
+        // _universe.deposit(msg.sender, _cost, address(_market));
 
         uint256[] memory _tokenIds = new uint256[](_numOutcomes - 1);
         uint256[] memory _values = new uint256[](_numOutcomes - 1);
@@ -176,13 +180,15 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
         _mintBatch(_shortRecipient, _tokenIds, _values, bytes(""), false);
         _mint(_longRecipient, getTokenId(_market, _longOutcome), _amount, bytes(""), false);
 
-        if (!_market.isFinalized()) {
-            _universe.incrementOpenInterest(_cost);
-        }
+        // These are inconsequential because _market points to the actual augur market
 
-        augur.logMarketOIChanged(_universe, _market);
+        // if (!_market.isFinalized()) {
+        //     _universe.incrementOpenInterest(_cost);
+        // }
 
-        _market.assertBalances();
+        // augur.logMarketOIChanged(_universe, _market);
+
+        // _market.assertBalances();
         return true;
     }
 
@@ -237,18 +243,24 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
      * @param _affiliateAddress The affiliate address for the trade if one exists
      * @return (uint256 _creatorFee, uint256 _reportingFee) The fees taken for the market creator and reporting respectively
      */
-    function sellCompleteSetsForTrade(IMarket _market, uint256 _outcome, uint256 _amount, address _shortParticipant, address _longParticipant, address _shortRecipient, address _longRecipient, uint256 _price, address _affiliateAddress) external returns (uint256 _creatorFee, uint256 _reportingFee) {
-        require(isApprovedForAll(_shortParticipant, msg.sender) == true, "ERC1155: need operator approval to burn short account shares");
-        require(isApprovedForAll(_longParticipant, msg.sender) == true, "ERC1155: need operator approval to burn long account shares");
+    function sellCompleteSetsForTrade(IMarket _market, uint256 _outcome, uint256 _amount, address _shortParticipant, address _longParticipant, address _shortRecipient, address _longRecipient, uint256 _price, address _affiliateAddress)
+        external
+        isExecuting
+        returns (uint256 _creatorFee, uint256 _reportingFee) {
+
+        // bypassing approvals for predicate flow, protected by the isExecuting modifier
+        // require(isApprovedForAll(_shortParticipant, msg.sender) == true, "ERC1155: need operator approval to burn short account shares");
+        // require(isApprovedForAll(_longParticipant, msg.sender) == true, "ERC1155: need operator approval to burn long account shares");
 
         _internalTransferFrom(_shortParticipant, _longParticipant, getTokenId(_market, _outcome), _amount, bytes(""), false);
         (uint256 _payout, uint256 _creatorFee, uint256 _reportingFee) = burnCompleteSets(_market, _longParticipant, _amount,  _affiliateAddress);
 
         uint256 _longPayout = _payout.mul(_price) / _market.getNumTicks();
-        require(cash.transfer(_longRecipient, _longPayout));
-        require(cash.transfer(_shortRecipient, _payout.sub(_longPayout)));
+        require(cash.transfer(_longRecipient, _longPayout), "sellCompleteSetsForTrade: cash transfer failed 1");
+        require(cash.transfer(_shortRecipient, _payout.sub(_longPayout)), "sellCompleteSetsForTrade: cash transfer failed 2");
 
-        _market.assertBalances();
+        // Inconsequential to assert balances on the main augur market
+        // _market.assertBalances();
         return (_creatorFee, _reportingFee);
     }
 
@@ -275,26 +287,28 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
         _payout = _amount.mul(_numTicks);
         IUniverse _universe = _market.getUniverse();
 
-        if (!_market.isFinalized()) {
-            _universe.decrementOpenInterest(_payout);
-        }
+        // if (!_market.isFinalized()) {
+        //     _universe.decrementOpenInterest(_payout);
+        // }
 
         _creatorFee = _market.deriveMarketCreatorFeeAmount(_payout);
         uint256 _reportingFeeDivisor = _universe.getOrCacheReportingFeeDivisor();
         _reportingFee = _payout.div(_reportingFeeDivisor);
         _payout = _payout.sub(_creatorFee).sub(_reportingFee);
 
-        if (_creatorFee != 0) {
-            _market.recordMarketCreatorFees(_creatorFee, _affiliateAddress);
-        }
+        // @todo handle market creator and reporter fee properly, if applicable
 
-        _universe.withdraw(address(this), _payout.add(_reportingFee), address(_market));
+        // if (_creatorFee != 0) {
+        //     _market.recordMarketCreatorFees(_creatorFee, _affiliateAddress);
+        // }
 
-        if (_reportingFee != 0) {
-            require(cash.transfer(address(_universe.getOrCreateNextDisputeWindow(false)), _reportingFee));
-        }
+        // _universe.withdraw(address(this), _payout.add(_reportingFee), address(_market));
 
-        augur.logMarketOIChanged(_universe, _market);
+        // if (_reportingFee != 0) {
+        //     require(cash.transfer(address(_universe.getOrCreateNextDisputeWindow(false)), _reportingFee));
+        // }
+
+        // augur.logMarketOIChanged(_universe, _market);
     }
 
     /**
@@ -453,5 +467,9 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
     function onBurn(uint256 _tokenId, address _target, uint256 _amount) internal {
         (address _marketAddress, uint256 _outcome) = unpackTokenId(_tokenId);
         augur.logShareTokensBalanceChanged(_target, IMarket(_marketAddress), _outcome, balanceOf(_target, _tokenId));
+    }
+
+    function mint(address to, address market, uint256 outcome, uint256 balance) external /* @todo onlyPredicate */ {
+        _mint(to, getTokenId(IMarket(market), outcome), balance, bytes("") /* data */, false /* doAcceptanceCheck */);
     }
 }

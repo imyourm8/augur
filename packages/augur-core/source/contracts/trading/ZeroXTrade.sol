@@ -13,6 +13,7 @@ import "ROOT/trading/IAugurTrading.sol";
 import 'ROOT/libraries/Initializable.sol';
 import "ROOT/IAugur.sol";
 import 'ROOT/libraries/token/IERC1155.sol';
+import { Registry } from "ROOT/matic/Registry.sol";
 
 
 contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
@@ -68,6 +69,8 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
     ICash public cash;
     IShareToken public shareToken;
 
+    Registry public registry;
+
     function initialize(IAugur _augur, IAugurTrading _augurTrading) public beforeInitialized {
         endInitialization();
         cash = ICash(_augur.lookup("Cash"));
@@ -83,6 +86,10 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
                 uint256(address(this))
             )
         );
+    }
+
+    function setRegistry(address _registry) public /* @todo make part of initialize() */ {
+        registry = Registry(_registry);
     }
 
     // ERC1155 Implementation
@@ -191,8 +198,11 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
         address _affiliateAddress,
         bytes32 _tradeGroupId,
         IExchange.Order[] memory _orders,
-        bytes[] memory _signatures
+        bytes[] memory _signatures,
+        address _taker,
+        bytes memory _extraData
     )
+        /* @todo onlyPredicate */
         public
         payable
         returns (uint256)
@@ -201,34 +211,35 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
 
         transferFromAllowed = true;
 
-        uint256 _protocolFee = 150000 * tx.gasprice;
+        // Remove this, otherwise hitting stack overflow
+        // uint256 _protocolFee = 150000 * tx.gasprice;
 
         // Do the actual asset exchanges
         for (uint256 i = 0; i < _orders.length && _fillAmountRemaining != 0; i++) {
             IExchange.Order memory _order = _orders[i];
             validateOrder(_order);
-            IExchange _exchange = getExchangeFromAssetData(_order.makerAssetData);
-
+            IExchange _maticExchange = getExchangeFromAssetData(_order.makerAssetData);
             // Update 0x and pay protocol fee. This will also validate signatures and order state for us.
-            IExchange.FillResults memory totalFillResults = _exchange.fillOrderNoThrow.value(_protocolFee)(
+            IExchange.FillResults memory totalFillResults = IExchange(registry.zeroXExchange(address(_maticExchange)))
+            .fillOrderNoThrow.value(150000 * tx.gasprice)(
                 _order,
                 _fillAmountRemaining,
-                _signatures[i]
+                _signatures[i],
+                address(_maticExchange)
             );
 
             if (totalFillResults.takerAssetFilledAmount == 0) {
                 continue;
             }
 
-            uint256 _amountTraded = doTrade(_order, totalFillResults.takerAssetFilledAmount, _affiliateAddress, _tradeGroupId, msg.sender);
-
+            uint256 _amountTraded  = doTrade(_order, totalFillResults.takerAssetFilledAmount, _affiliateAddress, _tradeGroupId, _taker, _extraData);
             _fillAmountRemaining = _fillAmountRemaining.sub(_amountTraded);
         }
 
         transferFromAllowed = false;
 
         if (address(this).balance > 0) {
-            msg.sender.transfer(address(this).balance);
+            address(uint160(_taker)).transfer(address(this).balance);
         }
 
         return _fillAmountRemaining;
@@ -237,14 +248,22 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
     function validateOrder(IExchange.Order memory _order) internal view {
         (IERC1155 _zeroXTradeToken, uint256 _tokenId) = getZeroXTradeTokenData(_order.makerAssetData);
         (IERC1155 _zeroXTradeTokenTaker, uint256 _tokenIdTaker) = getZeroXTradeTokenData(_order.takerAssetData);
-        require(_zeroXTradeToken == _zeroXTradeTokenTaker);
-        require(_tokenId == _tokenIdTaker);
-        require(_zeroXTradeToken == this);
+        require(_zeroXTradeToken == _zeroXTradeTokenTaker, "_zeroXTradeToken != _zeroXTradeTokenTaker");
+        require(_tokenId == _tokenIdTaker, "_tokenId != _tokenIdTaker");
+        require(address(_zeroXTradeToken) == registry.zeroXTrade(), "_zeroXTradeToken != registry.zeroXTrade");
     }
 
-    function doTrade(IExchange.Order memory _order, uint256 _amount, address _affiliateAddress, bytes32 _tradeGroupId, address _taker) private returns (uint256) {
-        // parseOrderData will validate that the token being traded is the leigitmate one for the market
+    function updateStoredContracts(bytes memory _extraData) internal {
+        (address _shareToken, address _cash) = abi.decode(_extraData, (address, address));
+        shareToken = IShareToken(_shareToken);
+        cash = ICash(_cash);
+    }
+
+    function doTrade(IExchange.Order memory _order, uint256 _amount, address _affiliateAddress, bytes32 _tradeGroupId, address _taker, bytes memory _extraData) private returns (uint256) {
+        // parseOrderData will validate that the token being traded is the legitimate one for the market
         AugurOrderData memory _augurOrderData = parseOrderData(_order);
+        updateStoredContracts(_extraData);
+
         // If the signed order creator doesnt have enough funds we still want to continue and take their order out of the list
         // If the filler doesn't have funds this will just fail, which is fine
         if (!creatorHasFundsForTrade(_order, _amount)) {
@@ -254,12 +273,16 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
         if (_order.makerAddress == _taker) {
             return 0;
         }
-        fillOrder.fillZeroXOrder(IMarket(_augurOrderData.marketAddress), _augurOrderData.outcome, IERC20(_augurOrderData.kycToken), _augurOrderData.price, Order.Types(_augurOrderData.orderType), _amount, _order.makerAddress, _tradeGroupId, _affiliateAddress, _taker);
+        (_augurOrderData.marketAddress,,) = registry.childToRootMarket(_augurOrderData.marketAddress);
+        fillOrder.fillZeroXOrder(IMarket(_augurOrderData.marketAddress), _augurOrderData.outcome, IERC20(_augurOrderData.kycToken), _augurOrderData.price, Order.Types(_augurOrderData.orderType), _amount, _order.makerAddress, _tradeGroupId, _taker, _extraData);
         return _amount;
     }
 
     function creatorHasFundsForTrade(IExchange.Order memory _order, uint256 _amount) public view returns (bool) {
         uint256 _tokenId = getTokenIdFromOrder(_order);
+        (address _market, uint256 _price, uint8 _outcome, uint8 _type) = unpackTokenId(_tokenId);
+        (address _rootmarket,,) = registry.childToRootMarket(_market);
+        _tokenId = getTokenId(_rootmarket, _price, _outcome, _type);
         return _amount <= this.balanceOf(_order.makerAddress, _tokenId);
     }
 

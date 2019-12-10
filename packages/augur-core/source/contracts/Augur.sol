@@ -384,7 +384,10 @@ contract Augur is IAugur {
     }
 
     function logShareTokensBalanceChanged(address _account, IMarket _market, uint256 _outcome, uint256 _balance) public returns (bool) {
-        require(msg.sender == registry["ShareToken"]);
+        // This is being invoked by newly deployed (per exit) share tokens, so have to bypass this check
+        // require(msg.sender == registry["ShareToken"]);
+
+        // _market is not a contract, so .getUniverse() fails
         emit ShareTokenBalanceChanged(address(_market.getUniverse()), _account, address(_market), _outcome, _balance);
         return true;
     }

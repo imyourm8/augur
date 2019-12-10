@@ -25,4 +25,7 @@ contract IShareToken is ITyped, IERC1155 {
     function totalSupplyForMarketOutcome(IMarket _market, uint256 _outcome) public view returns (uint256);
     function balanceOfMarketOutcome(IMarket _market, uint256 _outcome, address _account) public view returns (uint256);
     function lowestBalanceOfMarketOutcomes(IMarket _market, uint256[] memory _outcomes, address _account) public view returns (uint256);
+
+    function initializeFromPredicate(IAugur _augur, address _cash) external;
+    function mint(address to, address market, uint256 outcome, uint256 balance) external;
 }

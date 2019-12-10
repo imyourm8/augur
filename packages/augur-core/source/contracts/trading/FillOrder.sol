@@ -1,5 +1,4 @@
 pragma solidity 0.5.10;
-pragma experimental ABIEncoderV2;
 
 
 import 'ROOT/trading/IFillOrder.sol';
@@ -186,7 +185,6 @@ library Trade {
         // transfer shares and sell complete sets distributing payouts based on the price
         uint256 _marketCreatorFees;
         uint256 _reporterFees;
-
         // Sell both account shares
         (_marketCreatorFees, _reporterFees) = _data.contracts.shareToken.sellCompleteSetsForTrade(_data.contracts.market, _data.longOutcome, _numberOfCompleteSets, _data.shortFundsAccount, _data.longFundsAccount, getShortShareSellerDestination(_data), getLongShareSellerDestination(_data), _data.order.sharePriceLong, _data.affiliateAddress);
 
@@ -253,6 +251,7 @@ library Trade {
         _data.filler.sharesToSell -= _numberOfSharesToTrade;
         return true;
     }
+
 
     function tradeMakerTokensForFillerTokens(Data memory _data) internal returns (uint256) {
         uint256 _numberOfCompleteSets = _data.creator.sharesToBuy.min(_data.filler.sharesToBuy);
@@ -491,11 +490,19 @@ contract FillOrder is Initializable, ReentrancyGuard, IFillOrder {
         return fillOrderInternal(_filler, _tradeData, _amountFillerWants, _tradeGroupId);
     }
 
-    function fillZeroXOrder(IMarket _market, uint256 _outcome, IERC20 _kycToken, uint256 _price, Order.Types _orderType, uint256 _amount, address _creator, bytes32 _tradeGroupId, address _affiliateAddress, address _filler) external returns (uint256) {
-        require(msg.sender == zeroXTrade);
+    // Removing a variable (_affiliateAddress) to avoid stack too deep
+    function fillZeroXOrder(IMarket _market, uint256 _outcome, IERC20 _kycToken, uint256 _price, Order.Types _orderType, uint256 _amount, address _creator, bytes32 _tradeGroupId, address _filler, bytes calldata _extraData) external returns (uint256) {
+        require(msg.sender == zeroXTrade, "fillZeroXOrder: Not Authorized");
+        updateStoredContracts(_extraData);
         Trade.OrderData memory _orderData = Trade.createOrderData(storedContracts.shareToken, _market, _outcome, _kycToken, _price, _orderType, _amount, _creator);
-        Trade.Data memory _tradeData = Trade.createWithData(storedContracts, _orderData, _filler, _amount, _affiliateAddress);
+        Trade.Data memory _tradeData = Trade.createWithData(storedContracts, _orderData, _filler, _amount, address(0x0));
         return fillOrderInternal(_filler, _tradeData, _amount, _tradeGroupId);
+    }
+
+    function updateStoredContracts(bytes memory _extraData) internal {
+        (address shareToken, address cash) = abi.decode(_extraData, (address, address));
+        storedContracts.shareToken = IShareToken(shareToken);
+        storedContracts.denominationToken = ICash(cash);
     }
 
     function fillOrderInternal(address _filler, Trade.Data memory _tradeData, uint256 _amountFillerWants, bytes32 _tradeGroupId) internal nonReentrant returns (uint256) {

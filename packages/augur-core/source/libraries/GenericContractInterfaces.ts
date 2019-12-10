@@ -9491,6 +9491,18 @@ export class FillOrder<TBigNumber> extends Contract<TBigNumber> {
 	}
 }
 
+export class AugurPredicate<TBigNumber> extends Contract<TBigNumber> {
+	public constructor(dependencies: Dependencies<TBigNumber>, address: string) {
+		super(dependencies, address)
+	}
+
+	public initialize = async (augur: string, augurTrading: string, options?: { sender?: string }): Promise<Array<Event>> => {
+		options = options || {}
+		const abi: AbiFunction = {"constant":false,"inputs":[{"name":"_augur","type":"address"},{"name":"_augurTrading","type":"address"}],"name":"initialize","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"}
+		return await this.remoteCall(abi, [augur, augurTrading], 'initialize', options.sender)
+	}
+}
+
 
 export class Orders<TBigNumber> extends Contract<TBigNumber> {
 	public constructor(dependencies: Dependencies<TBigNumber>, address: string) {
