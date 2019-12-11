@@ -4,6 +4,7 @@ pragma experimental ABIEncoderV2;
 import { Registry } from "ROOT/matic/Registry.sol";
 import { BytesLib } from "ROOT/matic/libraries/BytesLib.sol";
 import { RLPReader } from "ROOT/matic/libraries/RLPReader.sol";
+import { IWithdrawManager } from "ROOT/matic/IWithdrawManager.sol";
 
 import { IShareToken } from "ROOT/reporting/IShareToken.sol";
 import { ShareToken } from "ROOT/reporting/ShareToken.sol";
@@ -20,9 +21,10 @@ contract AugurPredicate is Initializable {
     using RLPReader for RLPReader.RLPItem;
 
     bytes32 constant SHARE_TOKEN_BALANCE_CHANGED_EVENT_SIG = 0x350ea32dc29530b9557420816d743c436f8397086f98c96292138edd69e01cb3;
-    uint256 MAX_LOGS = 10;
+    uint256 MAX_LOGS = 100;
 
     Registry public registry;
+    IWithdrawManager public withdrawManager;
 
     IAugur public augur;
     ShareToken public shareToken;
@@ -43,8 +45,9 @@ contract AugurPredicate is Initializable {
         zeroXTrade = IZeroXTrade(_augurTrading.lookup("ZeroXTrade"));
     }
 
-    function setRegistry(address _registry) public /* @todo make part of initialize() */ {
+    function initialize2(address _registry, address _withdrawManager) public /* @todo make part of initialize() */ {
         registry = Registry(_registry);
+        withdrawManager = IWithdrawManager(_withdrawManager);
     }
 
     /**
@@ -93,8 +96,8 @@ contract AugurPredicate is Initializable {
         bytes memory receipt = referenceTxData[6].toBytes();
         RLPReader.RLPItem[] memory inputItems = receipt.toRlpItem().toList();
         uint256 logIndex = referenceTxData[9].toUint();
-        require(logIndex < MAX_LOGS, "Supporting a max of 10 logs");
-        // uint256 age = withdrawManager.verifyInclusion(data, 0 /* offset */, false /* verifyTxInclusion */);
+        require(logIndex < MAX_LOGS, "Supporting a max of 100 logs");
+        uint256 age = withdrawManager.verifyInclusion(data, 0 /* offset */, false /* verifyTxInclusion */);
         inputItems = inputItems[3].toList()[logIndex].toList(); // select log based on given logIndex
         bytes memory logData = inputItems[2].toBytes();
         inputItems = inputItems[1].toList(); // topics
@@ -104,17 +107,18 @@ contract AugurPredicate is Initializable {
             bytes32(inputItems[0].toUint()) == SHARE_TOKEN_BALANCE_CHANGED_EVENT_SIG,
             "ShareToken.claimBalance: Not ShareTokenBalanceChanged event signature"
         );
-        // @todo is Universe relevent?
+        // inputItems[1] is the universe address
         address account = address(inputItems[2].toUint());
         address market = address(inputItems[3].toUint());
-        uint256 outcome = inputItems[4].toUint();
-        uint256 balance = inputItems[5].toUint();
+        uint256 outcome = BytesLib.toUint(logData, 0);
+        uint256 balance = BytesLib.toUint(logData, 32);
         uint256 exitId = getExitId(market, msg.sender);
         require(
             lookupExit[exitId].shareToken != address(0x0),
             "Predicate.trade: Please call initializeForExit first"
         );
-        ShareToken(lookupExit[exitId].shareToken).mint(msg.sender, market, outcome, balance);
+        (address _rootMarket,,) = registry.childToRootMarket(market);
+        ShareToken(lookupExit[exitId].shareToken).mint(account, _rootMarket, outcome, balance);
     }
 
     function claimBalanceFaucet(address to, address market, uint256 outcome, uint256 balance) external {
