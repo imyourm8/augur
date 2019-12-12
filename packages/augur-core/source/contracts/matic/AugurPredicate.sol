@@ -49,18 +49,18 @@ contract AugurPredicate is Initializable {
 
     mapping(uint256 => ExitData) public lookupExit;
 
-    function initialize(IAugur _augur, IAugurTrading _augurTrading, OICash _oICash) public beforeInitialized {
+    function initialize(IAugur _augur, IAugurTrading _augurTrading) public beforeInitialized {
         endInitialization();
         augur = _augur;
         shareToken = IShareToken(_augur.lookup("ShareToken"));
         zeroXTrade = IZeroXTrade(_augurTrading.lookup("ZeroXTrade"));
         cash = Cash(_augur.lookup("Cash"));
-        oICash = _oICash;
     }
 
-    function initializeForMatic(address _registry, address _withdrawManager) public /* @todo make part of initialize() */ {
-        registry = Registry(_registry);
-        withdrawManager = IWithdrawManager(_withdrawManager);
+    function initializeForMatic(Registry _registry, IWithdrawManager _withdrawManager, OICash _oICash) public /* @todo make part of initialize() */ {
+        registry = _registry;
+        withdrawManager = _withdrawManager;
+        oICash = _oICash;
     }
 
     /**
@@ -204,7 +204,7 @@ contract AugurPredicate is Initializable {
             "Predicate.startExit: Exit is already initiated"
         );
         lookupExit[exitId].exitInitiated = true;
-        withdrawManager.addExitToQueue(lookupExit[exitId].exitPriority, exitor);
+        withdrawManager.addExitToQueue(lookupExit[exitId].exitPriority, exitor, address(oICash));
     }
 
     function onFinalizeExit(bytes calldata data) external {
