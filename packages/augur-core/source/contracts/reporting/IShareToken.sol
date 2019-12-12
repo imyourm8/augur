@@ -28,4 +28,5 @@ contract IShareToken is ITyped, IERC1155 {
 
     function initializeFromPredicate(IAugur _augur, address _cash) external;
     function mint(address to, address market, uint256 outcome, uint256 balance) external;
+    function setIsExecuting(bool isExecuting) public;
 }
