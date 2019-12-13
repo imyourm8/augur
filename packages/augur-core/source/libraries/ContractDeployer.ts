@@ -268,9 +268,7 @@ Deploying to: ${networkConfiguration.networkName}
       const contract = await this.contracts.get("AugurPredicate");
       const address = await this.construct(contract, []);
       contract.address = address;
-      // const augurPredicate = new AugurPredicate(this.dependencies, address);
       console.log(`Augur Predicate address: ${address}`);
-      // return augurPredicate;
     }
 
     private async uploadTestDaiContracts(): Promise<void> {
@@ -406,7 +404,7 @@ Deploying to: ${networkConfiguration.networkName}
         const tradeContract = await this.getContractAddress('Trade');
         const trade = new Trade(this.dependencies, tradeContract);
         promises.push(trade.initialize(this.augur!.address, this.augurTrading!.address));
-        
+
         const ordersContract = await this.getContractAddress('Orders');
         const orders = new Orders(this.dependencies, ordersContract);
         promises.push(orders.initialize(this.augur!.address, this.augurTrading!.address));
