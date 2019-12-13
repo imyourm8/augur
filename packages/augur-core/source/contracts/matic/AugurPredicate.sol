@@ -31,16 +31,16 @@ contract AugurPredicate is Initializable {
     IWithdrawManager public withdrawManager;
 
     IAugur public augur;
-    IShareToken public shareToken;
+    IShareToken public augurShareToken;
     IZeroXTrade public zeroXTrade;
-    Cash public cash;
+    Cash public augurCash;
     OICash public oICash;
 
     mapping(address => bool) claimedTradingProceeds;
 
     struct ExitData {
-        IShareToken shareToken;
-        Cash cash;
+        IShareToken exitShareToken;
+        Cash exitCash;
         uint256 exitPriority;
         bool exitInitiated;
         IMarket[] marketsList;
@@ -52,9 +52,9 @@ contract AugurPredicate is Initializable {
     function initialize(IAugur _augur, IAugurTrading _augurTrading) public beforeInitialized {
         endInitialization();
         augur = _augur;
-        shareToken = IShareToken(_augur.lookup("ShareToken"));
+        augurShareToken = IShareToken(_augur.lookup("ShareToken"));
         zeroXTrade = IZeroXTrade(_augurTrading.lookup("ZeroXTrade"));
-        cash = Cash(_augur.lookup("Cash"));
+        augurCash = Cash(_augur.lookup("Cash"));
     }
 
     function initializeForMatic(Registry _registry, IWithdrawManager _withdrawManager, OICash _oICash) public /* @todo make part of initialize() */ {
@@ -68,18 +68,18 @@ contract AugurPredicate is Initializable {
      * @dev new ShareToken() / new Cash() causes the bytecode of this contract to be too large, working around that limitation for now,
         however, the intention is to deploy a new ShareToken and Cash contract per exit - todo: use proxies for that
      */
-    function initializeForExit(IShareToken _shareToken, Cash _cash) external returns(uint256 exitId) {
+    function initializeForExit(IShareToken _exitShareToken, Cash _exitCash) external returns(uint256 exitId) {
         exitId = getExitId(msg.sender);
 
-        // IShareToken _shareToken = new ShareToken();
+        // IShareToken _exitShareToken = new ShareToken();
         // Cash cash = new Cash();
         // cash.initialize(augur);
 
-        _shareToken.initializeFromPredicate(augur, address(_cash));
+        _exitShareToken.initializeFromPredicate(augur, address(_exitCash));
 
         lookupExit[exitId] = ExitData({
-            shareToken: _shareToken,
-            cash: _cash,
+            exitShareToken: _exitShareToken,
+            exitCash: _exitCash,
             exitPriority: 0,
             exitInitiated: false,
             marketsList: new IMarket[](0)
@@ -103,7 +103,7 @@ contract AugurPredicate is Initializable {
     function claimBalance(bytes calldata data) external {
         uint256 exitId = getExitId(msg.sender);
         require(
-            address(lookupExit[exitId].shareToken) != address(0x0),
+            address(lookupExit[exitId].exitShareToken) != address(0x0),
             "Predicate.claimBalance: Please call initializeForExit first"
         );
         RLPReader.RLPItem[] memory referenceTxData = data.toRlpItem().toList();
@@ -128,18 +128,18 @@ contract AugurPredicate is Initializable {
         uint256 outcome = BytesLib.toUint(logData, 0);
         uint256 balance = BytesLib.toUint(logData, 32);
         address _rootMarket = _checkAndAddMaticMarket(exitId, market);
-        lookupExit[exitId].shareToken.mint(account, _rootMarket, outcome, balance);
+        lookupExit[exitId].exitShareToken.mint(account, _rootMarket, outcome, balance);
     }
 
     // move to TestAugurPredicate
     function claimBalanceFaucet(address to, address market, uint256 outcome, uint256 balance) external {
        uint256 exitId = getExitId(msg.sender);
         require(
-            address(lookupExit[exitId].shareToken) != address(0x0),
+            address(lookupExit[exitId].exitShareToken) != address(0x0),
             "Predicate.claimBalanceFaucet: Please call initializeForExit first"
         );
         address _rootMarket = _checkAndAddMaticMarket(exitId, market);
-        lookupExit[exitId].shareToken.mint(to, _rootMarket, outcome, balance);
+        lookupExit[exitId].exitShareToken.mint(to, _rootMarket, outcome, balance);
     }
 
     function _checkAndAddMaticMarket(uint256 exitId, address market) internal returns(address) {
@@ -151,7 +151,7 @@ contract AugurPredicate is Initializable {
         );
         lookupExit[exitId].markets[_rootMarket] = true;
         lookupExit[exitId].marketsList.push(IMarket(_rootMarket));
-        lookupExit[exitId].shareToken.initializeMarket(IMarket(_rootMarket), _numOutcomes, _numTicks);
+        lookupExit[exitId].exitShareToken.initializeMarket(IMarket(_rootMarket), _numOutcomes, _numTicks);
         return _rootMarket;
     }
 
@@ -177,7 +177,7 @@ contract AugurPredicate is Initializable {
         );
         uint256 exitId = getExitId(msg.sender);
         require(
-            address(lookupExit[exitId].shareToken) != address(0x0),
+            address(lookupExit[exitId].exitShareToken) != address(0x0),
             "Predicate.trade: Please call initializeForExit first"
         );
 
@@ -187,7 +187,7 @@ contract AugurPredicate is Initializable {
             _affiliateAddress,
             _tradeGroupId, _orders, _signatures,
             _taker,
-            abi.encode(lookupExit[exitId].shareToken, lookupExit[exitId].cash)
+            abi.encode(lookupExit[exitId].exitShareToken, lookupExit[exitId].exitCash)
         );
         setIsExecuting(exitId, false);
     }
@@ -196,7 +196,7 @@ contract AugurPredicate is Initializable {
         address exitor = msg.sender;
         uint256 exitId = getExitId(exitor);
         require(
-            address(lookupExit[exitId].shareToken) != address(0x0),
+            address(lookupExit[exitId].exitShareToken) != address(0x0),
             "Predicate.startExit: Please call initializeForExit first"
         );
         require(
@@ -227,7 +227,7 @@ contract AugurPredicate is Initializable {
 
     function processExitForFinalizedMarket(IMarket market, address exitor, uint256 exitId) internal {
         if (!claimedTradingProceeds[address(market)]) {
-            shareToken.claimTradingProceeds(market, address(this) /* _shareHolder */, address(0) /* _affiliateAddress */);
+            augurShareToken.claimTradingProceeds(market, address(this) /* _shareHolder */, address(0) /* _affiliateAddress */);
             claimedTradingProceeds[address(market)] = true;
         }
 
@@ -236,12 +236,12 @@ contract AugurPredicate is Initializable {
         uint256 numOutcomes = market.getNumberOfOutcomes();
         uint256 payout;
         for (uint256 outcome = 0; outcome < numOutcomes; outcome++) {
-            uint256 sharesOwned = lookupExit[exitId].shareToken.balanceOfMarketOutcome(market, outcome, exitor);
+            uint256 sharesOwned = lookupExit[exitId].exitShareToken.balanceOfMarketOutcome(market, outcome, exitor);
             payout += calculateProceeds(market, outcome, sharesOwned);
         }
 
         // try to settle payout with cash
-        uint256 cashAvailable = cash.balanceOf(address(this));
+        uint256 cashAvailable = augurCash.balanceOf(address(this));
         uint256 _feesOwed;
         // If cash is not sufficient, withdraw from OICash
         if (cashAvailable < payout) {
@@ -250,7 +250,7 @@ contract AugurPredicate is Initializable {
             require(_success, "OICash.Withdraw failed");
         }
         require(
-            cash.transfer(exitor, payout - _feesOwed),
+            augurCash.transfer(exitor, payout - _feesOwed),
             "Cash transfer failed"
         );
     }
@@ -267,8 +267,8 @@ contract AugurPredicate is Initializable {
         uint256[] memory _sharesToGive = new uint256[](numOutcomes);
         // try to give as many shares from escrow as possible
         for (uint256 outcome = 0; outcome < numOutcomes; outcome++) {
-            uint256 sharesToGive = lookupExit[exitId].shareToken.balanceOfMarketOutcome(market, outcome, exitor);
-            uint256 sharesInEscrow = shareToken.balanceOfMarketOutcome(market, outcome, address(this));
+            uint256 sharesToGive = lookupExit[exitId].exitShareToken.balanceOfMarketOutcome(market, outcome, exitor);
+            uint256 sharesInEscrow = augurShareToken.balanceOfMarketOutcome(market, outcome, address(this));
             if (sharesInEscrow < sharesToGive) {
                 completeSetsToBuy = completeSetsToBuy.max(sharesToGive - sharesInEscrow);
             }
@@ -283,8 +283,8 @@ contract AugurPredicate is Initializable {
             );
         }
 
-        uint256[] memory _tokenIds = shareToken.getTokenIds(market, _outcomes);
-        shareToken.unsafeBatchTransferFrom(address(this), exitor, _tokenIds, _sharesToGive);
+        uint256[] memory _tokenIds = augurShareToken.getTokenIds(market, _outcomes);
+        augurShareToken.unsafeBatchTransferFrom(address(this), exitor, _tokenIds, _sharesToGive);
     }
 
     function getExitId(address _exitor) public pure returns(uint256 _exitId) {
@@ -292,7 +292,7 @@ contract AugurPredicate is Initializable {
     }
 
     function setIsExecuting(uint256 exitId, bool isExecuting) internal {
-        lookupExit[exitId].cash.setIsExecuting(isExecuting);
-        lookupExit[exitId].shareToken.setIsExecuting(isExecuting);
+        lookupExit[exitId].exitCash.setIsExecuting(isExecuting);
+        lookupExit[exitId].exitShareToken.setIsExecuting(isExecuting);
     }
 }
