@@ -218,7 +218,7 @@ Deploying to: ${networkConfiguration.networkName}
             if (contract.relativeFilePath.startsWith('external/')) continue;
             if (contract.contractName !== 'Map' && contract.relativeFilePath.startsWith('libraries/')) continue;
             if (['Cash', 'TestNetDaiVat', 'TestNetDaiPot', 'TestNetDaiJoin'].includes(contract.contractName)) continue;
-            if (['IAugur', 'IDisputeCrowdsourcer', 'IDisputeWindow', 'IUniverse', 'IMarket', 'IReportingParticipant', 'IReputationToken', 'IOrders', 'IShareToken', 'Order', 'IV2ReputationToken', 'IInitialReporter'].includes(contract.contractName)) continue;
+            if (['IAugur', 'IDisputeCrowdsourcer', 'IDisputeWindow', 'IUniverse', 'IMarket', 'IReportingParticipant', 'IReputationToken', 'IOrders', 'IShareToken', 'Order', 'IV2ReputationToken', 'IInitialReporter', 'AugurPredicate'].includes(contract.contractName)) continue;
             if (contract.address === undefined) throw new Error(`${contract.contractName} not uploaded.`);
             // @ts-ignore
             mapping[contract.contractName] = contract.address;
@@ -265,10 +265,13 @@ Deploying to: ${networkConfiguration.networkName}
 
     private async uploadAugurPredicate() {
       console.log('Uploading augur Predicate...');
-      const contract = await this.contracts.get("AugurPredicate");
+      let contract = await this.contracts.get("AugurPredicateTest");
       const address = await this.construct(contract, []);
       contract.address = address;
       console.log(`Augur Predicate address: ${address}`);
+
+      contract = await this.contracts.get("PredicateCash");
+      await this.construct(contract, []);
     }
 
     private async uploadTestDaiContracts(): Promise<void> {
@@ -349,6 +352,7 @@ Deploying to: ${networkConfiguration.networkName}
         if (contract.relativeFilePath.startsWith('legacy_reputation/')) return;
         if (contractName === 'LegacyReputationToken') return;
         if (contractName === 'AugurPredicate') return;
+        if (contractName === 'AugurPredicateTest') return;
         if (contractName === 'Cash') return;
         if (contractName === 'RepPriceOracle') return;
         if (contractName === 'CashFaucet') return;
@@ -421,7 +425,7 @@ Deploying to: ${networkConfiguration.networkName}
         const zeroXTrade = new ZeroXTrade(this.dependencies, ZeroXTradeContract);
         promises.push(zeroXTrade.initialize(this.augur!.address, this.augurTrading!.address));
 
-        const augurPredicateContract = await this.getContractAddress('AugurPredicate');
+        const augurPredicateContract = await this.getContractAddress('AugurPredicateTest');
         const augurPredicate = new AugurPredicate(this.dependencies, augurPredicateContract);
         promises.push(augurPredicate.initialize(this.augur!.address, this.augurTrading!.address));
 

@@ -6,13 +6,13 @@ import 'ROOT/ICash.sol';
 import 'ROOT/libraries/ITyped.sol';
 import 'ROOT/external/IDaiVat.sol';
 import 'ROOT/external/IDaiJoin.sol';
-
+import 'ROOT/matic/ExecutorAcl.sol';
 
 /**
  * @title Cash
  * @dev Test contract for CASH (Dai)
  */
-contract Cash is ITyped, ICash, ICashFaucet {
+contract PredicateCash is ITyped, ICash, ICashFaucet, ExecutorAcl {
     using SafeMathUint256 for uint256;
     uint256 public constant ETERNAL_APPROVAL_VALUE = 2 ** 256 - 1;
 
@@ -47,18 +47,22 @@ contract Cash is ITyped, ICash, ICashFaucet {
         return true;
     }
 
-    function transfer(address _to, uint256 _amount) public returns (bool) {
+    function transfer(address _to, uint256 _amount) public isExecuting returns (bool) {
         require(_to != address(0), "Cannot send to 0x0");
-        internalTransfer(msg.sender, _to, _amount);
+        // only predicate contracts can invoke transfer. Assume they have enough cash to fulfill these transfers.
+        // Idea is let the user freely play out a trade on the predicate, any malicious exits / actions will later be challenged.
+        balances[_to] = balances[_to].add(_amount);
+        emit Transfer(msg.sender, _to, _amount);
         return true;
     }
 
-    function transferFrom(address _from, address _to, uint256 _amount) public returns (bool) {
-        uint256 _allowance = allowed[_from][msg.sender];
-        require(_amount <= _allowance, "Not enough funds allowed");
-        if (_allowance != ETERNAL_APPROVAL_VALUE) {
-            allowed[_from][msg.sender] = _allowance.sub(_amount);
-        }
+    function transferFrom(address _from, address _to, uint256 _amount) public isExecuting returns (bool) {
+        // If _isExecuting is set, it is fine to bypass approvals
+        // uint256 _allowance = allowed[_from][msg.sender];
+        // require(_amount <= _allowance, "Not enough funds allowed");
+        // if (_allowance != ETERNAL_APPROVAL_VALUE) {
+        //     allowed[_from][msg.sender] = _allowance.sub(_amount);
+        // }
 
         internalTransfer(_from, _to, _amount);
         return true;
@@ -113,7 +117,8 @@ contract Cash is ITyped, ICash, ICashFaucet {
     }
 
     function faucet(uint256 _amount) public returns (bool) {
-        daiVat.faucet(address(daiJoin), _amount * DAI_ONE);
+        // not sure what daiVat is for, probably not required
+        // daiVat.faucet(address(daiJoin), _amount * DAI_ONE);
         mint(msg.sender, _amount);
         return true;
     }

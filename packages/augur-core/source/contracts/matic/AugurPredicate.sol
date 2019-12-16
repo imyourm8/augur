@@ -1,10 +1,12 @@
 pragma solidity 0.5.10;
 pragma experimental ABIEncoderV2;
 
-import { Registry } from "ROOT/matic/Registry.sol";
+import { PredicateRegistry } from "ROOT/matic/PredicateRegistry.sol";
+import { PredicateCash } from "ROOT/matic/PredicateCash.sol";
 import { BytesLib } from "ROOT/matic/libraries/BytesLib.sol";
 import { RLPReader } from "ROOT/matic/libraries/RLPReader.sol";
-import { IWithdrawManager } from "ROOT/matic/IWithdrawManager.sol";
+import { IWithdrawManager } from "ROOT/matic/plasma/IWithdrawManager.sol";
+import { IDepositManager } from "ROOT/matic/plasma/IDepositManager.sol";
 
 import { IShareToken } from "ROOT/reporting/IShareToken.sol";
 import { OICash } from "ROOT/reporting/OICash.sol";
@@ -27,8 +29,9 @@ contract AugurPredicate is Initializable {
     bytes32 constant SHARE_TOKEN_BALANCE_CHANGED_EVENT_SIG = 0x350ea32dc29530b9557420816d743c436f8397086f98c96292138edd69e01cb3;
     uint256 MAX_LOGS = 100;
 
-    Registry public registry;
+    PredicateRegistry public predicateRegistry;
     IWithdrawManager public withdrawManager;
+    IDepositManager public depositManager;
 
     IAugur public augur;
     IShareToken public augurShareToken;
@@ -37,10 +40,11 @@ contract AugurPredicate is Initializable {
     OICash public oICash;
 
     mapping(address => bool) claimedTradingProceeds;
+    uint256 private constant MAX_APPROVAL_AMOUNT = 2 ** 256 - 1;
 
     struct ExitData {
         IShareToken exitShareToken;
-        Cash exitCash;
+        PredicateCash exitCash;
         uint256 exitPriority;
         bool exitInitiated;
         IMarket[] marketsList;
@@ -54,13 +58,47 @@ contract AugurPredicate is Initializable {
         augur = _augur;
         augurShareToken = IShareToken(_augur.lookup("ShareToken"));
         zeroXTrade = IZeroXTrade(_augurTrading.lookup("ZeroXTrade"));
-        augurCash = Cash(_augur.lookup("Cash"));
+        // augurCash = Cash(_augur.lookup("Cash"));
     }
 
-    function initializeForMatic(Registry _registry, IWithdrawManager _withdrawManager, OICash _oICash) public /* @todo make part of initialize() */ {
-        registry = _registry;
+    function initializeForMatic(
+        PredicateRegistry _predicateRegistry,
+        IWithdrawManager _withdrawManager,
+        IDepositManager _depositManager,
+        OICash _oICash,
+        IAugur _mainAugur
+        // Cash _augurCash
+    ) public /* @todo make part of initialize() */ {
+        predicateRegistry = _predicateRegistry;
         withdrawManager = _withdrawManager;
+        depositManager = IDepositManager(_depositManager);
         oICash = _oICash;
+        // augurCash = _augurCash;
+        augurCash = Cash(_mainAugur.lookup("Cash"));
+        require(
+            augurCash.approve(address(_mainAugur), MAX_APPROVAL_AMOUNT),
+            "Cash approval to Augur failed"
+        );
+    }
+
+    function deposit(uint256 amount) public {
+        require(
+            augurCash.transferFrom(msg.sender, address(this), amount),
+            "Cash transfer failed"
+        );
+        // require(
+        //     augurCash.approve(address(augur), amount),
+        //     "Cash approval to Augur failed"
+        // );
+        require(
+            oICash.deposit(amount),
+            "OICash deposit failed"
+        );
+        require(
+            oICash.approve(address(depositManager), amount),
+            "OICash approval to deposit manager failed"
+        );
+        depositManager.depositERC20ForUser(address(oICash), msg.sender, amount);
     }
 
     /**
@@ -68,7 +106,7 @@ contract AugurPredicate is Initializable {
      * @dev new ShareToken() / new Cash() causes the bytecode of this contract to be too large, working around that limitation for now,
         however, the intention is to deploy a new ShareToken and Cash contract per exit - todo: use proxies for that
      */
-    function initializeForExit(IShareToken _exitShareToken, Cash _exitCash) external returns(uint256 exitId) {
+    function initializeForExit(IShareToken _exitShareToken, PredicateCash _exitCash) external returns(uint256 exitId) {
         exitId = getExitId(msg.sender);
 
         // IShareToken _exitShareToken = new ShareToken();
@@ -100,11 +138,11 @@ contract AugurPredicate is Initializable {
       * branchMask Merkle proof branchMask for the receipt
       * logIndex Log Index to read from the receipt
      */
-    function claimBalance(bytes calldata data) external {
+    function claimShareBalance(bytes calldata data) external {
         uint256 exitId = getExitId(msg.sender);
         require(
             address(lookupExit[exitId].exitShareToken) != address(0x0),
-            "Predicate.claimBalance: Please call initializeForExit first"
+            "Predicate.claimShareBalance: Please call initializeForExit first"
         );
         RLPReader.RLPItem[] memory referenceTxData = data.toRlpItem().toList();
         bytes memory receipt = referenceTxData[6].toBytes();
@@ -120,7 +158,7 @@ contract AugurPredicate is Initializable {
         // event ShareTokenBalanceChanged(address indexed universe, address indexed account, address indexed market, uint256 outcome, uint256 balance);
         require(
             bytes32(inputItems[0].toUint()) == SHARE_TOKEN_BALANCE_CHANGED_EVENT_SIG,
-            "ShareToken.claimBalance: Not ShareTokenBalanceChanged event signature"
+            "Predicate.claimShareBalance: Not ShareTokenBalanceChanged event signature"
         );
         // inputItems[1] is the universe
         address account = address(inputItems[2].toUint());
@@ -131,27 +169,18 @@ contract AugurPredicate is Initializable {
         lookupExit[exitId].exitShareToken.mint(account, _rootMarket, outcome, balance);
     }
 
-    // move to TestAugurPredicate
-    function claimBalanceFaucet(address to, address market, uint256 outcome, uint256 balance) external {
-       uint256 exitId = getExitId(msg.sender);
-        require(
-            address(lookupExit[exitId].exitShareToken) != address(0x0),
-            "Predicate.claimBalanceFaucet: Please call initializeForExit first"
-        );
-        address _rootMarket = _checkAndAddMaticMarket(exitId, market);
-        lookupExit[exitId].exitShareToken.mint(to, _rootMarket, outcome, balance);
-    }
-
     function _checkAndAddMaticMarket(uint256 exitId, address market) internal returns(address) {
         // ask the actual mainnet augur ShareToken for the market details
-        (address _rootMarket, uint256 _numOutcomes, uint256 _numTicks) = registry.childToRootMarket(market);
+        (address _rootMarket, uint256 _numOutcomes, uint256 _numTicks) = predicateRegistry.childToRootMarket(market);
         require(
             _rootMarket != address(0x0),
             "AugurPredicate:_addMarketToExit: Market does not exist"
         );
-        lookupExit[exitId].markets[_rootMarket] = true;
-        lookupExit[exitId].marketsList.push(IMarket(_rootMarket));
-        lookupExit[exitId].exitShareToken.initializeMarket(IMarket(_rootMarket), _numOutcomes, _numTicks);
+        if (!lookupExit[exitId].markets[_rootMarket]) {
+            lookupExit[exitId].markets[_rootMarket] = true;
+            lookupExit[exitId].marketsList.push(IMarket(_rootMarket));
+            lookupExit[exitId].exitShareToken.initializeMarket(IMarket(_rootMarket), _numOutcomes, _numTicks);
+        }
         return _rootMarket;
     }
 
