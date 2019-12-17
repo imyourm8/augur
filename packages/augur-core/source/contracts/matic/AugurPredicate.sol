@@ -56,9 +56,7 @@ contract AugurPredicate is Initializable {
     function initialize(IAugur _augur, IAugurTrading _augurTrading) public beforeInitialized {
         endInitialization();
         augur = _augur;
-        augurShareToken = IShareToken(_augur.lookup("ShareToken"));
         zeroXTrade = IZeroXTrade(_augurTrading.lookup("ZeroXTrade"));
-        // augurCash = Cash(_augur.lookup("Cash"));
     }
 
     function initializeForMatic(
@@ -75,6 +73,7 @@ contract AugurPredicate is Initializable {
         oICash = _oICash;
         // augurCash = _augurCash;
         augurCash = Cash(_mainAugur.lookup("Cash"));
+        augurShareToken = IShareToken(_mainAugur.lookup("ShareToken"));
         require(
             augurCash.approve(address(_mainAugur), MAX_APPROVAL_AMOUNT),
             "Cash approval to Augur failed"
@@ -94,11 +93,12 @@ contract AugurPredicate is Initializable {
             oICash.deposit(amount),
             "OICash deposit failed"
         );
-        require(
-            oICash.approve(address(depositManager), amount),
-            "OICash approval to deposit manager failed"
-        );
-        depositManager.depositERC20ForUser(address(oICash), msg.sender, amount);
+        // require(
+        //     oICash.approve(address(depositManager), amount),
+        //     "OICash approval to deposit manager failed"
+        // );
+        // emit state sync event
+        // depositManager.depositERC20ForUser(address(oICash), msg.sender, amount);
     }
 
     /**
@@ -289,7 +289,28 @@ contract AugurPredicate is Initializable {
         return _numberOfShares.mul(_payoutNumerator);
     }
 
+    // function processExitForMarket(IMarket market, address exitor, uint256 exitId) internal {
     function processExitForMarket(IMarket market, address exitor, uint256 exitId) internal {
+        (uint256[] memory _sharesToGive, uint256[] memory _outcomes, uint256 completeSetsToBuy) = processExitForMarketHelper(market, exitor, exitId);
+        if (completeSetsToBuy > 0) {
+            require(
+                oICash.buyCompleteSets(market, completeSetsToBuy),
+                "processExitForMarket: Buying complete sets failed"
+            );
+        }
+
+        uint256[] memory _tokenIds = augurShareToken.getTokenIds(market, _outcomes);
+        augurShareToken.unsafeBatchTransferFrom(address(this), exitor, _tokenIds, _sharesToGive);
+    }
+
+    function buyCompleteSets(IMarket market, uint256 completeSetsToBuy) public {
+        require(
+                oICash.buyCompleteSets(market, completeSetsToBuy),
+                "processExitForMarket: Buying complete sets failed"
+            );
+    }
+
+    function processExitForMarketHelper(IMarket market, address exitor, uint256 exitId) public view returns(uint256[] memory, uint256[] memory, uint256) {
         uint256 numOutcomes = market.getNumberOfOutcomes();
         uint256 completeSetsToBuy;
         uint256[] memory _outcomes = new uint256[](numOutcomes);
@@ -305,15 +326,7 @@ contract AugurPredicate is Initializable {
             _sharesToGive[outcome] = sharesToGive;
         }
 
-        if (completeSetsToBuy > 0) {
-            require(
-                oICash.buyCompleteSets(market, completeSetsToBuy),
-                "processExitForMarket: Buying complete sets failed"
-            );
-        }
-
-        uint256[] memory _tokenIds = augurShareToken.getTokenIds(market, _outcomes);
-        augurShareToken.unsafeBatchTransferFrom(address(this), exitor, _tokenIds, _sharesToGive);
+        return (_sharesToGive, _outcomes, completeSetsToBuy);
     }
 
     function getExitId(address _exitor) public pure returns(uint256 _exitId) {
