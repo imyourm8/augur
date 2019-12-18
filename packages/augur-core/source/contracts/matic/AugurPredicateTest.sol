@@ -23,4 +23,8 @@ contract AugurPredicateTest is AugurPredicate {
     function processExitForMarketTest(IMarket market, address exitor, uint256 exitId) public {
         processExitForMarket(market, exitor, exitId);
     }
+
+    function processExitForFinalizedMarketTest(IMarket market, address exitor, uint256 exitId) public {
+        processExitForFinalizedMarket(market, exitor, exitId);
+    }
 }

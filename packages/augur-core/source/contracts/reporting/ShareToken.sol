@@ -322,6 +322,8 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
         return claimTradingProceedsInternal(_market, _shareHolder, _affiliateAddress);
     }
 
+    function claimTradingProceedsToOICash(IMarket _market, address _affiliateAddress) external nonReentrant returns (uint256[] memory _outcomeFees) {}
+
     function claimTradingProceedsInternal(IMarket _market, address _shareHolder, address _affiliateAddress) internal returns (uint256[] memory _outcomeFees) {
         require(augur.isKnownMarket(_market));
         if (!_market.isFinalized()) {

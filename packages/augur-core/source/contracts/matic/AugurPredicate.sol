@@ -38,6 +38,7 @@ contract AugurPredicate is Initializable {
     IZeroXTrade public zeroXTrade;
     Cash public augurCash;
     OICash public oICash;
+    address public childOICash;
 
     mapping(address => bool) claimedTradingProceeds;
     uint256 private constant MAX_APPROVAL_AMOUNT = 2 ** 256 - 1;
@@ -64,16 +65,17 @@ contract AugurPredicate is Initializable {
         IWithdrawManager _withdrawManager,
         IDepositManager _depositManager,
         OICash _oICash,
+        address _childOICash,
         IAugur _mainAugur
-        // Cash _augurCash
     ) public /* @todo make part of initialize() */ {
         predicateRegistry = _predicateRegistry;
         withdrawManager = _withdrawManager;
         depositManager = IDepositManager(_depositManager);
         oICash = _oICash;
-        // augurCash = _augurCash;
+        childOICash = _childOICash;
         augurCash = Cash(_mainAugur.lookup("Cash"));
         augurShareToken = IShareToken(_mainAugur.lookup("ShareToken"));
+        // The allowance may eventually run out, @todo provide a mechanism to refresh this allowance
         require(
             augurCash.approve(address(_mainAugur), MAX_APPROVAL_AMOUNT),
             "Cash approval to Augur failed"
@@ -85,20 +87,11 @@ contract AugurPredicate is Initializable {
             augurCash.transferFrom(msg.sender, address(this), amount),
             "Cash transfer failed"
         );
-        // require(
-        //     augurCash.approve(address(augur), amount),
-        //     "Cash approval to Augur failed"
-        // );
         require(
             oICash.deposit(amount),
             "OICash deposit failed"
         );
-        // require(
-        //     oICash.approve(address(depositManager), amount),
-        //     "OICash approval to deposit manager failed"
-        // );
-        // emit state sync event
-        // depositManager.depositERC20ForUser(address(oICash), msg.sender, amount);
+        // @todo emit state sync event to deposit on Matic
     }
 
     /**
@@ -233,7 +226,15 @@ contract AugurPredicate is Initializable {
             "Predicate.startExit: Exit is already initiated"
         );
         lookupExit[exitId].exitInitiated = true;
-        withdrawManager.addExitToQueue(lookupExit[exitId].exitPriority, exitor, address(oICash));
+        withdrawManager.addExitToQueue(
+            exitor,
+            childOICash,
+            address(oICash), // rootToken
+            exitId, // exitAmountOrTokenId - think of exitId like a token Id
+            bytes32(0), // txHash - field not required for now
+            false, // isRegularExit
+            lookupExit[exitId].exitPriority
+        );
     }
 
     function onFinalizeExit(bytes calldata data) external {
@@ -242,7 +243,7 @@ contract AugurPredicate is Initializable {
             "ONLY_WITHDRAW_MANAGER"
         );
         // this encoded data is compatible with rest of the matic predicates
-        (uint256 exitId,,address exitor,) = abi.decode(data, (uint256, address, address, uint256));
+        (,,address exitor,uint256 exitId) = abi.decode(data, (uint256, address, address, uint256));
         for(uint256 i = 0; i < lookupExit[exitId].marketsList.length; i++) {
             IMarket market = IMarket(lookupExit[exitId].marketsList[i]);
             if (market.isFinalized()) {
@@ -255,62 +256,42 @@ contract AugurPredicate is Initializable {
     }
 
     function processExitForFinalizedMarket(IMarket market, address exitor, uint256 exitId) internal {
-        if (!claimedTradingProceeds[address(market)]) {
-            augurShareToken.claimTradingProceeds(market, address(this) /* _shareHolder */, address(0) /* _affiliateAddress */);
-            claimedTradingProceeds[address(market)] = true;
-        }
+        claimTradingProceeds(market);
 
         // since trading proceeds have been called, predicate has 0 shares for all outcomes;
         // so the exitor will get the payout for the shares
-        uint256 numOutcomes = market.getNumberOfOutcomes();
-        uint256 payout;
-        for (uint256 outcome = 0; outcome < numOutcomes; outcome++) {
-            uint256 sharesOwned = lookupExit[exitId].exitShareToken.balanceOfMarketOutcome(market, outcome, exitor);
-            payout += calculateProceeds(market, outcome, sharesOwned);
-        }
 
-        // try to settle payout with cash
-        uint256 cashAvailable = augurCash.balanceOf(address(this));
-        uint256 _feesOwed;
-        // If cash is not sufficient, withdraw from OICash
-        if (cashAvailable < payout) {
-            bool _success;
-            (_success, _feesOwed) = oICash.withdraw(payout - cashAvailable);
-            require(_success, "OICash.Withdraw failed");
-        }
+        uint256 payout = calculateProceeds(market, exitor, exitId);
+        if (payout == 0) return;
+
+        (bool _success, uint256 _feesOwed) = oICash.withdraw(payout);
+        require(_success, "OICash.Withdraw failed");
+        if (payout <= _feesOwed) return;
         require(
             augurCash.transfer(exitor, payout - _feesOwed),
             "Cash transfer failed"
         );
     }
 
-    function calculateProceeds(IMarket _market, uint256 _outcome, uint256 _numberOfShares) internal view returns (uint256) {
-        uint256 _payoutNumerator = _market.getWinningPayoutNumerator(_outcome);
-        return _numberOfShares.mul(_payoutNumerator);
-    }
-
-    // function processExitForMarket(IMarket market, address exitor, uint256 exitId) internal {
-    function processExitForMarket(IMarket market, address exitor, uint256 exitId) internal {
-        (uint256[] memory _sharesToGive, uint256[] memory _outcomes, uint256 completeSetsToBuy) = processExitForMarketHelper(market, exitor, exitId);
-        if (completeSetsToBuy > 0) {
-            require(
-                oICash.buyCompleteSets(market, completeSetsToBuy),
-                "processExitForMarket: Buying complete sets failed"
-            );
+    function claimTradingProceeds(IMarket market) public {
+        if (!claimedTradingProceeds[address(market)]) {
+            claimedTradingProceeds[address(market)] = true;
+            augurShareToken.claimTradingProceedsToOICash(market, address(0) /* _affiliateAddress */);
         }
-
-        uint256[] memory _tokenIds = augurShareToken.getTokenIds(market, _outcomes);
-        augurShareToken.unsafeBatchTransferFrom(address(this), exitor, _tokenIds, _sharesToGive);
     }
 
-    function buyCompleteSets(IMarket market, uint256 completeSetsToBuy) public {
-        require(
-                oICash.buyCompleteSets(market, completeSetsToBuy),
-                "processExitForMarket: Buying complete sets failed"
-            );
+    function calculateProceeds(IMarket market, address exitor, uint256 exitId) public view returns(uint256) {
+        uint256 numOutcomes = market.getNumberOfOutcomes();
+        uint256 payout;
+        for (uint256 outcome = 0; outcome < numOutcomes; outcome++) {
+            uint256 sharesOwned = lookupExit[exitId].exitShareToken.balanceOfMarketOutcome(market, outcome, exitor);
+            payout = payout.add(augurShareToken.calculateProceeds(market, outcome, sharesOwned));
+        }
+        return payout;
     }
 
-    function processExitForMarketHelper(IMarket market, address exitor, uint256 exitId) public view returns(uint256[] memory, uint256[] memory, uint256) {
+
+    function processExitForMarket(IMarket market, address exitor, uint256 exitId) internal {
         uint256 numOutcomes = market.getNumberOfOutcomes();
         uint256 completeSetsToBuy;
         uint256[] memory _outcomes = new uint256[](numOutcomes);
@@ -326,7 +307,15 @@ contract AugurPredicate is Initializable {
             _sharesToGive[outcome] = sharesToGive;
         }
 
-        return (_sharesToGive, _outcomes, completeSetsToBuy);
+        if (completeSetsToBuy > 0) {
+            require(
+                oICash.buyCompleteSets(market, completeSetsToBuy),
+                "processExitForMarket: Buying complete sets failed"
+            );
+        }
+
+        uint256[] memory _tokenIds = augurShareToken.getTokenIds(market, _outcomes);
+        augurShareToken.unsafeBatchTransferFrom(address(this), exitor, _tokenIds, _sharesToGive);
     }
 
     function getExitId(address _exitor) public pure returns(uint256 _exitId) {
