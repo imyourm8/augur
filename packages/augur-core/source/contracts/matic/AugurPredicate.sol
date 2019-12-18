@@ -2,11 +2,9 @@ pragma solidity 0.5.10;
 pragma experimental ABIEncoderV2;
 
 import { PredicateRegistry } from "ROOT/matic/PredicateRegistry.sol";
-import { PredicateCash } from "ROOT/matic/PredicateCash.sol";
 import { BytesLib } from "ROOT/matic/libraries/BytesLib.sol";
 import { RLPReader } from "ROOT/matic/libraries/RLPReader.sol";
 import { IWithdrawManager } from "ROOT/matic/plasma/IWithdrawManager.sol";
-import { IDepositManager } from "ROOT/matic/plasma/IDepositManager.sol";
 
 import { IShareToken } from "ROOT/reporting/IShareToken.sol";
 import { OICash } from "ROOT/reporting/OICash.sol";
@@ -31,7 +29,6 @@ contract AugurPredicate is Initializable {
 
     PredicateRegistry public predicateRegistry;
     IWithdrawManager public withdrawManager;
-    IDepositManager public depositManager;
 
     IAugur public augur;
     IShareToken public augurShareToken;
@@ -45,7 +42,7 @@ contract AugurPredicate is Initializable {
 
     struct ExitData {
         IShareToken exitShareToken;
-        PredicateCash exitCash;
+        Cash exitCash;
         uint256 exitPriority;
         bool exitInitiated;
         IMarket[] marketsList;
@@ -63,14 +60,12 @@ contract AugurPredicate is Initializable {
     function initializeForMatic(
         PredicateRegistry _predicateRegistry,
         IWithdrawManager _withdrawManager,
-        IDepositManager _depositManager,
         OICash _oICash,
         address _childOICash,
         IAugur _mainAugur
     ) public /* @todo make part of initialize() */ {
         predicateRegistry = _predicateRegistry;
         withdrawManager = _withdrawManager;
-        depositManager = IDepositManager(_depositManager);
         oICash = _oICash;
         childOICash = _childOICash;
         augurCash = Cash(_mainAugur.lookup("Cash"));
@@ -99,7 +94,7 @@ contract AugurPredicate is Initializable {
      * @dev new ShareToken() / new Cash() causes the bytecode of this contract to be too large, working around that limitation for now,
         however, the intention is to deploy a new ShareToken and Cash contract per exit - todo: use proxies for that
      */
-    function initializeForExit(IShareToken _exitShareToken, PredicateCash _exitCash) external returns(uint256 exitId) {
+    function initializeForExit(IShareToken _exitShareToken, Cash _exitCash) external returns(uint256 exitId) {
         exitId = getExitId(msg.sender);
 
         // IShareToken _exitShareToken = new ShareToken();

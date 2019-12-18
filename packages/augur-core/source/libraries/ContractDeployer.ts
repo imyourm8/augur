@@ -265,13 +265,10 @@ Deploying to: ${networkConfiguration.networkName}
 
     private async uploadAugurPredicate() {
       console.log('Uploading augur Predicate...');
-      let contract = await this.contracts.get("AugurPredicateTest");
+      const contract = await this.contracts.get("AugurPredicateTest");
       const address = await this.construct(contract, []);
       contract.address = address;
       console.log(`Augur Predicate address: ${address}`);
-
-      contract = await this.contracts.get("PredicateCash");
-      await this.construct(contract, []);
     }
 
     private async uploadTestDaiContracts(): Promise<void> {
