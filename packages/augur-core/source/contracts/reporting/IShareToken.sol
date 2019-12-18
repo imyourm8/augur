@@ -14,6 +14,7 @@ contract IShareToken is ITyped, IERC1155 {
     function unsafeTransferFrom(address _from, address _to, uint256 _id, uint256 _value) public;
     function unsafeBatchTransferFrom(address _from, address _to, uint256[] memory _ids, uint256[] memory _values) public;
     function claimTradingProceeds(IMarket _market, address _shareHolder, bytes32 _fingerprint) external returns (uint256[] memory _outcomeFees);
+    function claimTradingProceedsToOICash(IMarket _market, bytes32 _fingerprint) external returns (uint256[] memory _outcomeFees);
     function getMarket(uint256 _tokenId) external view returns (IMarket);
     function getOutcome(uint256 _tokenId) external view returns (uint256);
     function getTokenId(IMarket _market, uint256 _outcome) public pure returns (uint256 _tokenId);

@@ -38,7 +38,16 @@ contract OICash is VariableSupplyToken, Initializable, IOICash {
         return true;
     }
 
-    function withdraw(uint256 _amount) external returns (bool) {
+    function depositForUser(address _user, uint256 _amount) external returns (bool) {
+        require(
+            msg.sender == address(shareToken),
+            "OICash: only ShareToken is authorized to call depositForUser"
+        );
+        mint(_user, _amount);
+        return true;
+    }
+
+    function withdraw(uint256 _amount) external returns (bool, uint256) {
         burn(msg.sender, _amount);
 
         // Withdraw cash to this contract
@@ -59,7 +68,7 @@ contract OICash is VariableSupplyToken, Initializable, IOICash {
 
         cash.transfer(msg.sender, _payout);
 
-        return true;
+        return (true, _feesOwed);
     }
 
     function payFees(uint256 _feeAmount) external returns (bool) {

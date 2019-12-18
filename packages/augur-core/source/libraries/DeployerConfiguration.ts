@@ -90,7 +90,7 @@ export const defaultDeployerConfiguration: DeployerConfiguration = {
   uploadBlockNumbersOutputPath: path.join(ARTIFACT_OUTPUT_ROOT, 'upload-block-numbers.json'),
   augurAddress: process.env.AUGUR_ADDRESS,
   isProduction: envOrDefault('IS_PRODUCTION', false),
-  useNormalTime: envOrDefault('USE_NORMAL_TIME', true),
+  useNormalTime: envOrDefault('USE_NORMAL_TIME', false),
   writeArtifacts: true,
   externalAddresses: {},
 };

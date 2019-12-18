@@ -8,6 +8,7 @@ import 'ROOT/libraries/Initializable.sol';
 import 'ROOT/reporting/IMarket.sol';
 import 'ROOT/trading/IProfitLoss.sol';
 import 'ROOT/IAugur.sol';
+import 'ROOT/reporting/IOICash.sol';
 
 
 /**
@@ -305,10 +306,14 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
      * @return Bool True
      */
     function claimTradingProceeds(IMarket _market, address _shareHolder, bytes32 _fingerprint) external nonReentrant returns (uint256[] memory _outcomeFees) {
-        return claimTradingProceedsInternal(_market, _shareHolder, _fingerprint);
+        return claimTradingProceedsInternal(_market, _shareHolder, _fingerprint, false);
     }
 
-    function claimTradingProceedsInternal(IMarket _market, address _shareHolder, bytes32 _fingerprint) internal returns (uint256[] memory _outcomeFees) {
+    function claimTradingProceedsToOICash(IMarket _market, bytes32 _fingerprint) external nonReentrant returns (uint256[] memory _outcomeFees) {
+        return claimTradingProceedsInternal(_market, msg.sender, _affiliateAddress, true);
+    }
+
+    function claimTradingProceedsInternal(IMarket _market, address _shareHolder, bytes32 _fingerprint, bool toOICash) internal returns (uint256[] memory _outcomeFees) {
         require(augur.isKnownMarket(_market));
         if (!_market.isFinalized()) {
             _market.finalize();
@@ -330,8 +335,12 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
                 logTradingProceedsClaimed(_market, _outcome, _shareHolder, _numberOfShares, _shareHolderShare, _creatorShare.add(_reporterShare));
 
                 if (_proceeds > 0) {
-                    _market.getUniverse().withdraw(address(this), _shareHolderShare.add(_reporterShare), address(_market));
-                    distributeProceeds(_market, _shareHolder, _shareHolderShare, _creatorShare, _reporterShare, _fingerprint);
+                    if (toOICash) {
+                        IOICash(_market.getUniverse().getOpenInterestCash()).depositForUser(_shareHolder, _proceeds);
+                    } else {
+                        _market.getUniverse().withdraw(address(this), _shareHolderShare.add(_reporterShare), address(_market));
+                        distributeProceeds(_market, _shareHolder, _shareHolderShare, _creatorShare, _reporterShare, _affiliateAddress);
+                    }
                 }
                 _outcomeFees[_outcome] = _creatorShare.add(_reporterShare);
             }
