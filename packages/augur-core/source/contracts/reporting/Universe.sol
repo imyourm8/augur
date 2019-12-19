@@ -681,4 +681,8 @@ contract Universe is IUniverse {
         cash.transfer(address(getOrCreateNextDisputeWindow(false)), _extraCash);
         return true;
     }
+
+    function getOpenInterestCash() public view returns(address) {
+        return address(openInterestCash);
+    }
 }
