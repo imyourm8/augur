@@ -14,6 +14,7 @@ contract IShareToken is ITyped, IERC1155 {
     function unsafeTransferFrom(address _from, address _to, uint256 _id, uint256 _value) public;
     function unsafeBatchTransferFrom(address _from, address _to, uint256[] memory _ids, uint256[] memory _values) public;
     function claimTradingProceeds(IMarket _market, address _shareHolder, address _affiliateAddress) external returns (uint256[] memory _outcomeFees);
+    function claimTradingProceedsToOICash(IMarket _market, address _affiliateAddress) external returns (uint256[] memory _outcomeFees);
     function getMarket(uint256 _tokenId) external view returns (IMarket);
     function getOutcome(uint256 _tokenId) external view returns (uint256);
     function getTokenId(IMarket _market, uint256 _outcome) public pure returns (uint256 _tokenId);
@@ -25,6 +26,7 @@ contract IShareToken is ITyped, IERC1155 {
     function totalSupplyForMarketOutcome(IMarket _market, uint256 _outcome) public view returns (uint256);
     function balanceOfMarketOutcome(IMarket _market, uint256 _outcome, address _account) public view returns (uint256);
     function lowestBalanceOfMarketOutcomes(IMarket _market, uint256[] memory _outcomes, address _account) public view returns (uint256);
+    function calculateProceeds(IMarket _market, uint256 _outcome, uint256 _numberOfShares) public view returns (uint256);
 
     function initializeFromPredicate(IAugur _augur, address _cash) external;
     function mint(address to, address market, uint256 outcome, uint256 balance) external;

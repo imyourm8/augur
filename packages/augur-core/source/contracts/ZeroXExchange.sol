@@ -6,7 +6,7 @@ import 'ROOT/libraries/ReentrancyGuard.sol';
 import 'ROOT/external/IWallet.sol';
 import 'ROOT/libraries/math/SafeMathUint256.sol';
 import 'ROOT/libraries/token/IERC1155.sol';
-import { Registry } from "ROOT/matic/Registry.sol";
+import { PredicateRegistry } from "ROOT/matic/PredicateRegistry.sol";
 
 
 contract ZeroXExchange is IExchange, ReentrancyGuard {
@@ -96,7 +96,7 @@ contract ZeroXExchange is IExchange, ReentrancyGuard {
     // Orders with specified senderAddress and with a salt less than their epoch are considered cancelled
     mapping (address => mapping (address => uint256)) public orderEpoch;
 
-    Registry public registry;
+    PredicateRegistry public registry;
 
     constructor ()
         public
@@ -111,7 +111,7 @@ contract ZeroXExchange is IExchange, ReentrancyGuard {
     }
 
     function setRegistry(address _registry) public /* @todo make part of constructor */ {
-        registry = Registry(_registry);
+        registry = PredicateRegistry(_registry);
     }
 
     /// @dev Adds properties of both FillResults instances.

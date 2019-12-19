@@ -13,7 +13,7 @@ import "ROOT/trading/IAugurTrading.sol";
 import 'ROOT/libraries/Initializable.sol';
 import "ROOT/IAugur.sol";
 import 'ROOT/libraries/token/IERC1155.sol';
-import { Registry } from "ROOT/matic/Registry.sol";
+import { PredicateRegistry } from "ROOT/matic/PredicateRegistry.sol";
 
 
 contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
@@ -69,7 +69,7 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
     ICash public cash;
     IShareToken public shareToken;
 
-    Registry public registry;
+    PredicateRegistry public registry;
 
     function initialize(IAugur _augur, IAugurTrading _augurTrading) public beforeInitialized {
         endInitialization();
@@ -89,7 +89,7 @@ contract ZeroXTrade is Initializable, IZeroXTrade, IERC1155 {
     }
 
     function setRegistry(address _registry) public /* @todo make part of initialize() */ {
-        registry = Registry(_registry);
+        registry = PredicateRegistry(_registry);
     }
 
     // ERC1155 Implementation
