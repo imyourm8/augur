@@ -3,6 +3,8 @@ pragma experimental ABIEncoderV2;
 
 import { PredicateRegistry } from "ROOT/matic/PredicateRegistry.sol";
 import { BytesLib } from "ROOT/matic/libraries/BytesLib.sol";
+import { Common } from "ROOT/matic/libraries/Common.sol";
+import { RLPEncode } from "ROOT/matic/libraries/RLPEncode.sol";
 import { RLPReader } from "ROOT/matic/libraries/RLPReader.sol";
 import { IWithdrawManager } from "ROOT/matic/plasma/IWithdrawManager.sol";
 import { IErc20Predicate } from "ROOT/matic/plasma/IErc20Predicate.sol";
@@ -15,6 +17,7 @@ import { IZeroXTrade } from "ROOT/trading/IZeroXTrade.sol";
 import { IAugurTrading } from "ROOT/trading/IAugurTrading.sol";
 import { IAugur } from "ROOT/IAugur.sol";
 import { Cash } from "ROOT/Cash.sol";
+import { ZeroXExchange } from "ROOT/ZeroXExchange.sol";
 import { Initializable } from "ROOT/libraries/Initializable.sol";
 import { SafeMathUint256 } from "ROOT/libraries/math/SafeMathUint256.sol";
 
@@ -27,6 +30,7 @@ contract AugurPredicate is Initializable {
 
     bytes32 constant internal SHARE_TOKEN_BALANCE_CHANGED_EVENT_SIG = 0x350ea32dc29530b9557420816d743c436f8397086f98c96292138edd69e01cb3;
     uint256 constant internal MAX_LOGS = 100;
+    bytes constant public networkId = "0x3A99";
 
     PredicateRegistry public predicateRegistry;
     IWithdrawManager public withdrawManager;
@@ -190,7 +194,8 @@ contract AugurPredicate is Initializable {
             "Predicate.claimCashBalance: Please call initializeForExit first"
         );
         bytes memory _preState = erc20Predicate.interpretStateUpdate(abi.encode(data, participant, true /* verifyInclusionInCheckpoint */, false /* isChallenge */));
-        (uint256 closingBalance, uint256 age,,address maticCashAddress) = abi.decode(_preState, (uint256, uint256, address, address));
+        (uint256 closingBalance, uint256 age,,) = abi.decode(_preState, (uint256, uint256, address, address));
+        // (uint256 closingBalance, uint256 age,,address maticCashAddress) = abi.decode(_preState, (uint256, uint256, address, address));
         // @todo Validate maticCashAddress
         lookupExit[exitId].exitPriority = lookupExit[exitId].exitPriority.max(age);
         setIsExecuting(exitId, true);
@@ -363,5 +368,88 @@ contract AugurPredicate is Initializable {
 
     function isExitInitialized(uint256 exitId) public view returns(bool) {
         return lookupExit[exitId].status == ExitStatus.Initialized;
+    }
+
+    function verifyDeprecation(bytes calldata exit, bytes calldata /* inputUtxo */, bytes calldata challengeData)
+        external
+        view
+        returns (bool)
+    {
+        uint256 age = withdrawManager.verifyInclusion(challengeData, 0 /* offset */, true /* verifyTxInclusion */);
+        // this encoded data is compatible with rest of the matic predicates
+        (address exitor,,uint256 exitId,,) = abi.decode(exit, (address, address, uint256, bytes32, bool));
+        if (age <= lookupExit[exitId].exitPriority) return false; // Providing an older tx results in an unsuccessful challenge
+        RLPReader.RLPItem[] memory _challengeData = challengeData.toRlpItem().toList();
+        bytes memory challengeTx = _challengeData[10].toBytes();
+        uint256 orderIndex = _challengeData[9].toUint();
+        return isValidDeprecationType1(challengeTx, exitor) || isValidDeprecationType2(challengeTx, exitor, orderIndex);
+    }
+
+    function isValidDeprecationType1(bytes memory txData, address signer) internal pure returns(bool) {
+        RLPReader.RLPItem[] memory txList = txData.toRlpItem().toList();
+        if (txList.length != 9) return false; // MALFORMED_TX
+        // address to = RLPReader.toAddress(txList[3]); // corresponds to "to" field in tx
+        // @todo assert that "to" belongs to a set of contracts on matic; txs to which qualify for state deprecations
+        (address _signer,) = getAddressFromTx(txList);
+        return _signer == signer;
+    }
+
+    function isValidDeprecationType2(bytes memory txData, address exitor, uint256 orderIndex) internal view returns(bool) {
+        RLPReader.RLPItem[] memory txList = txData.toRlpItem().toList();
+        if (txList.length != 9) return false; // MALFORMED_TX
+        address to = RLPReader.toAddress(txList[3]); // corresponds to "to" field in tx
+        require(
+            to == predicateRegistry.zeroXTrade(),
+            "isValidDeprecationType2: challengeTx.to != zeroXTrade"
+        );
+        bytes4 funcSig = BytesLib.toBytes4(BytesLib.slice(txData, 0, 4));
+        require(
+            funcSig == 0x089042f7,
+            "isValidDeprecationType2: funcSig of challengeTx should match that of zeroxTrade.trade"
+        );
+        (,,, IExchange.Order[] memory _orders, bytes[] memory _signatures) = abi.decode(
+            BytesLib.slice(txData, 4, txData.length - 4),
+            (uint256, address, bytes32, IExchange.Order[], bytes[])
+        );
+        IExchange.Order memory order = _orders[orderIndex];
+        require(
+            order.makerAddress == exitor,
+            "isValidDeprecationType2: Order not signed by the exitor"
+        );
+        IExchange _maticExchange = zeroXTrade.getExchangeFromAssetData(order.makerAssetData);
+        ZeroXExchange exchange = ZeroXExchange(predicateRegistry.zeroXExchange(address(_maticExchange)));
+        IExchange.OrderInfo memory orderInfo = exchange.getOrderInfo(order);
+        require(
+            exchange.isValidSignature(
+                orderInfo.orderHash,
+                order.makerAddress,
+                _signatures[orderIndex]
+            ),
+            "isValidDeprecationType2: INVALID_ORDER_SIGNATURE"
+        );
+        // @todo Check order expiration
+        return true;
+    }
+
+    function getAddressFromTx(RLPReader.RLPItem[] memory txList)
+        internal
+        pure
+        returns (address signer, bytes32 txHash)
+    {
+        bytes[] memory rawTx = new bytes[](9);
+        for (uint8 i = 0; i <= 5; i++) {
+            rawTx[i] = txList[i].toBytes();
+        }
+        rawTx[6] = networkId;
+        rawTx[7] = hex""; // [7] and [8] have something to do with v, r, s values
+        rawTx[8] = hex"";
+
+        txHash = keccak256(RLPEncode.encodeList(rawTx));
+        signer = ecrecover(
+            txHash,
+            Common.getV(txList[6].toBytes(), Common.toUint16(networkId)),
+            bytes32(txList[7].toUint()),
+            bytes32(txList[8].toUint())
+        );
     }
 }
