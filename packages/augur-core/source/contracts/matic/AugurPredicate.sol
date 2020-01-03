@@ -5,6 +5,7 @@ import { PredicateRegistry } from "ROOT/matic/PredicateRegistry.sol";
 import { BytesLib } from "ROOT/matic/libraries/BytesLib.sol";
 import { RLPReader } from "ROOT/matic/libraries/RLPReader.sol";
 import { IWithdrawManager } from "ROOT/matic/plasma/IWithdrawManager.sol";
+import { IErc20Predicate } from "ROOT/matic/plasma/IErc20Predicate.sol";
 
 import { IShareToken } from "ROOT/reporting/IShareToken.sol";
 import { OICash } from "ROOT/reporting/OICash.sol";
@@ -24,11 +25,12 @@ contract AugurPredicate is Initializable {
 
     event ExitFinalized(uint256 indexed exitId,  address indexed exitor);
 
-    bytes32 constant SHARE_TOKEN_BALANCE_CHANGED_EVENT_SIG = 0x350ea32dc29530b9557420816d743c436f8397086f98c96292138edd69e01cb3;
-    uint256 MAX_LOGS = 100;
+    bytes32 constant internal SHARE_TOKEN_BALANCE_CHANGED_EVENT_SIG = 0x350ea32dc29530b9557420816d743c436f8397086f98c96292138edd69e01cb3;
+    uint256 constant internal MAX_LOGS = 100;
 
     PredicateRegistry public predicateRegistry;
     IWithdrawManager public withdrawManager;
+    IErc20Predicate public erc20Predicate;
 
     IAugur public augur;
     IShareToken public augurShareToken;
@@ -60,12 +62,14 @@ contract AugurPredicate is Initializable {
     function initializeForMatic(
         PredicateRegistry _predicateRegistry,
         IWithdrawManager _withdrawManager,
+        IErc20Predicate _erc20Predicate,
         OICash _oICash,
         address _childOICash,
         IAugur _mainAugur
     ) public /* @todo make part of initialize() */ {
         predicateRegistry = _predicateRegistry;
         withdrawManager = _withdrawManager;
+        erc20Predicate = _erc20Predicate;
         oICash = _oICash;
         childOICash = _childOICash;
         augurCash = Cash(_mainAugur.lookup("Cash"));
@@ -154,7 +158,39 @@ contract AugurPredicate is Initializable {
         uint256 outcome = BytesLib.toUint(logData, 0);
         uint256 balance = BytesLib.toUint(logData, 32);
         address _rootMarket = _checkAndAddMaticMarket(exitId, market);
+        setIsExecuting(exitId, true);
         lookupExit[exitId].exitShareToken.mint(account, _rootMarket, outcome, balance);
+        setIsExecuting(exitId, false);
+    }
+
+    /**
+     * @notice Prove receipt and index of the log (Deposit, Withdraw, LogTransfer) in the receipt to claim balance from Matic
+     * @param data RLP encoded data of the reference tx (proof-of-funds) that encodes the following fields
+      * headerNumber Header block number of which the reference tx was a part of
+      * blockProof Proof that the block header (in the child chain) is a leaf in the submitted merkle root
+      * blockNumber Block number of which the reference tx is a part of
+      * blockTime Reference tx block time
+      * blocktxRoot Transactions root of block
+      * blockReceiptsRoot Receipts root of block
+      * receipt Receipt of the reference transaction
+      * receiptProof Merkle proof of the reference receipt
+      * branchMask Merkle proof branchMask for the receipt
+      * logIndex Log Index to read from the receipt
+     * @param participant Account for which the proof-of-funds is being provided
+     */
+    function claimCashBalance(bytes calldata data, address participant) external {
+        uint256 exitId = getExitId(msg.sender);
+        require(
+            address(lookupExit[exitId].exitShareToken) != address(0x0),
+            "Predicate.claimCashBalance: Please call initializeForExit first"
+        );
+        bytes memory _preState = erc20Predicate.interpretStateUpdate(abi.encode(data, participant, true /* verifyInclusionInCheckpoint */, false /* isChallenge */));
+        (uint256 closingBalance, uint256 age,,address maticCashAddress) = abi.decode(_preState, (uint256, uint256, address, address));
+        // @todo Validate maticCashAddress
+        lookupExit[exitId].exitPriority = lookupExit[exitId].exitPriority.max(age);
+        setIsExecuting(exitId, true);
+        lookupExit[exitId].exitCash.joinMint(participant, closingBalance);
+        setIsExecuting(exitId, false);
     }
 
     function _checkAndAddMaticMarket(uint256 exitId, address market) internal returns(address) {

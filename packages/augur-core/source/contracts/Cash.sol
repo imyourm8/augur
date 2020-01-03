@@ -127,7 +127,7 @@ contract Cash is ITyped, ICash, ICashFaucet, ExecutorAcl {
         require((z = x - y) <= x, "math-sub-underflow");
     }
 
-    function joinMint(address usr, uint wad) public auth returns (bool) {
+    function joinMint(address usr, uint wad) public isExecuting /* auth */ returns (bool) {
         return mint(usr, wad);
     }
 

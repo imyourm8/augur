@@ -471,7 +471,7 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
         augur.logShareTokensBalanceChanged(_target, IMarket(_marketAddress), _outcome, balanceOf(_target, _tokenId));
     }
 
-    function mint(address to, address market, uint256 outcome, uint256 balance) external /* @todo onlyPredicate */ {
+    function mint(address to, address market, uint256 outcome, uint256 balance) external isExecuting {
         _mint(to, getTokenId(IMarket(market), outcome), balance, bytes("") /* data */, false /* doAcceptanceCheck */);
     }
 }
