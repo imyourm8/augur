@@ -19,6 +19,33 @@ contract Cash is ITyped, ICash, ICashFaucet {
     event Mint(address indexed target, uint256 value);
     event Burn(address indexed target, uint256 value);
 
+    event Deposit(
+        address indexed token,
+        address indexed from,
+        uint256 amount,
+        uint256 input1,
+        uint256 output1
+    );
+
+    event Withdraw(
+        address indexed token,
+        address indexed from,
+        uint256 amount,
+        uint256 input1,
+        uint256 output1
+    );
+
+    event LogTransfer(
+        address indexed token,
+        address indexed from,
+        address indexed to,
+        uint256 amount,
+        uint256 input1,
+        uint256 input2,
+        uint256 output1,
+        uint256 output2
+    );
+
     mapping (address => uint) public wards;
     modifier auth {
         require(wards[msg.sender] == 1);
@@ -68,9 +95,13 @@ contract Cash is ITyped, ICash, ICashFaucet {
         require(_to != address(0), "Cannot send to 0x0");
         require(balances[_from] >= _amount, "SEND Not enough funds");
 
+        uint256 input1 = balanceOf(_from);
+        uint256 input2 = balanceOf(_to);
+
         balances[_from] = balances[_from].sub(_amount);
         balances[_to] = balances[_to].add(_amount);
         emit Transfer(_from, _to, _amount);
+        emit LogTransfer(address(this), _from, _to, _amount, input1, input2, balanceOf(_from), balanceOf(_to));
         return true;
     }
 
@@ -134,20 +165,25 @@ contract Cash is ITyped, ICash, ICashFaucet {
     }
 
     function mint(address _target, uint256 _amount) internal returns (bool) {
+        uint256 input1 = balanceOf(_target);
+
         balances[_target] = balances[_target].add(_amount);
         supply = supply.add(_amount);
         emit Mint(_target, _amount);
         emit Transfer(address(0), _target, _amount);
+        emit Deposit(address(this), _target, _amount, input1, balanceOf(_target));
         return true;
     }
 
     function burn(address _target, uint256 _amount) internal returns (bool) {
         require(balanceOf(_target) >= _amount, "BURN Not enough funds");
+        uint256 input1 = balanceOf(_target);
 
         balances[_target] = balances[_target].sub(_amount);
         supply = supply.sub(_amount);
 
         emit Burn(_target, _amount);
+        emit Withdraw(address(this), _target, _amount, input1, balanceOf(_target));
         return true;
     }
 
