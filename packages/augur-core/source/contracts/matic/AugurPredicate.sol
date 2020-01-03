@@ -42,11 +42,12 @@ contract AugurPredicate is Initializable {
     mapping(address => bool) claimedTradingProceeds;
     uint256 private constant MAX_APPROVAL_AMOUNT = 2 ** 256 - 1;
 
+    enum ExitStatus { Invalid, Initialized, InProgress, Finalized }
     struct ExitData {
         IShareToken exitShareToken;
         Cash exitCash;
         uint256 exitPriority;
-        bool exitInitiated;
+        ExitStatus status;
         IMarket[] marketsList;
         mapping(address => bool) markets;
     }
@@ -100,6 +101,10 @@ contract AugurPredicate is Initializable {
      */
     function initializeForExit(IShareToken _exitShareToken, Cash _exitCash) external returns(uint256 exitId) {
         exitId = getExitId(msg.sender);
+        require(
+            lookupExit[exitId].status == ExitStatus.Invalid,
+            "Predicate.initializeForExit: Exit is already initialized"
+        );
 
         // IShareToken _exitShareToken = new ShareToken();
         // Cash cash = new Cash();
@@ -111,7 +116,7 @@ contract AugurPredicate is Initializable {
             exitShareToken: _exitShareToken,
             exitCash: _exitCash,
             exitPriority: 0,
-            exitInitiated: false,
+            status: ExitStatus.Initialized,
             marketsList: new IMarket[](0)
         });
     }
@@ -133,7 +138,7 @@ contract AugurPredicate is Initializable {
     function claimShareBalance(bytes calldata data) external {
         uint256 exitId = getExitId(msg.sender);
         require(
-            address(lookupExit[exitId].exitShareToken) != address(0x0),
+            lookupExit[exitId].status == ExitStatus.Initialized,
             "Predicate.claimShareBalance: Please call initializeForExit first"
         );
         RLPReader.RLPItem[] memory referenceTxData = data.toRlpItem().toList();
@@ -181,7 +186,7 @@ contract AugurPredicate is Initializable {
     function claimCashBalance(bytes calldata data, address participant) external {
         uint256 exitId = getExitId(msg.sender);
         require(
-            address(lookupExit[exitId].exitShareToken) != address(0x0),
+            lookupExit[exitId].status == ExitStatus.Initialized,
             "Predicate.claimCashBalance: Please call initializeForExit first"
         );
         bytes memory _preState = erc20Predicate.interpretStateUpdate(abi.encode(data, participant, true /* verifyInclusionInCheckpoint */, false /* isChallenge */));
@@ -230,7 +235,7 @@ contract AugurPredicate is Initializable {
         );
         uint256 exitId = getExitId(msg.sender);
         require(
-            address(lookupExit[exitId].exitShareToken) != address(0x0),
+            lookupExit[exitId].status == ExitStatus.Initialized,
             "Predicate.trade: Please call initializeForExit first"
         );
 
@@ -249,14 +254,10 @@ contract AugurPredicate is Initializable {
         address exitor = msg.sender;
         uint256 exitId = getExitId(exitor);
         require(
-            address(lookupExit[exitId].exitShareToken) != address(0x0),
-            "Predicate.startExit: Please call initializeForExit first"
+            lookupExit[exitId].status == ExitStatus.Initialized,
+            "Predicate.startExit: Exit should be in Initialized state"
         );
-        require(
-            lookupExit[exitId].exitInitiated == false,
-            "Predicate.startExit: Exit is already initiated"
-        );
-        lookupExit[exitId].exitInitiated = true;
+        lookupExit[exitId].status = ExitStatus.InProgress;
         withdrawManager.addExitToQueue(
             exitor,
             childOICash,
@@ -275,33 +276,35 @@ contract AugurPredicate is Initializable {
         );
         // this encoded data is compatible with rest of the matic predicates
         (,,address exitor,uint256 exitId) = abi.decode(data, (uint256, address, address, uint256));
-        for(uint256 i = 0; i < lookupExit[exitId].marketsList.length; i++) {
+        uint256 payout;
+        for (uint256 i = 0; i < lookupExit[exitId].marketsList.length; i++) {
             IMarket market = IMarket(lookupExit[exitId].marketsList[i]);
             if (market.isFinalized()) {
-                processExitForFinalizedMarket(market, exitor, exitId);
+                payout = payout.add(processExitForFinalizedMarket(market, exitor, exitId));
             } else {
                 processExitForMarket(market, exitor, exitId);
             }
         }
+        payout = payout.add(lookupExit[exitId].exitCash.balanceOf(exitor));
+        (bool _success, uint256 _feesOwed) = oICash.withdraw(payout);
+        require(_success, "OICash.Withdraw failed");
+        lookupExit[exitId].status = ExitStatus.Finalized;
+        if (payout > _feesOwed) {
+            require(
+                augurCash.transfer(exitor, payout - _feesOwed),
+                "Cash transfer failed"
+            );
+        }
         emit ExitFinalized(exitId, exitor);
     }
 
-    function processExitForFinalizedMarket(IMarket market, address exitor, uint256 exitId) internal {
+    function processExitForFinalizedMarket(IMarket market, address exitor, uint256 exitId) internal returns(uint256) {
         claimTradingProceeds(market);
 
         // since trading proceeds have been called, predicate has 0 shares for all outcomes;
         // so the exitor will get the payout for the shares
 
-        uint256 payout = calculateProceeds(market, exitor, exitId);
-        if (payout == 0) return;
-
-        (bool _success, uint256 _feesOwed) = oICash.withdraw(payout);
-        require(_success, "OICash.Withdraw failed");
-        if (payout <= _feesOwed) return;
-        require(
-            augurCash.transfer(exitor, payout - _feesOwed),
-            "Cash transfer failed"
-        );
+        return calculateProceeds(market, exitor, exitId);
     }
 
     function claimTradingProceeds(IMarket market) public {
@@ -356,5 +359,9 @@ contract AugurPredicate is Initializable {
     function setIsExecuting(uint256 exitId, bool isExecuting) internal {
         lookupExit[exitId].exitCash.setIsExecuting(isExecuting);
         lookupExit[exitId].exitShareToken.setIsExecuting(isExecuting);
+    }
+
+    function isExitInitialized(uint256 exitId) public view returns(bool) {
+        return lookupExit[exitId].status == ExitStatus.Initialized;
     }
 }
