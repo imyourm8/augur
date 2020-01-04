@@ -53,6 +53,7 @@ contract AugurPredicate is Initializable {
         uint256 exitPriority;
         ExitStatus status;
         IMarket[] marketsList;
+        uint256 startExitTime;
         mapping(address => bool) markets;
     }
 
@@ -120,6 +121,7 @@ contract AugurPredicate is Initializable {
             exitShareToken: _exitShareToken,
             exitCash: _exitCash,
             exitPriority: 0,
+            startExitTime: 0,
             status: ExitStatus.Initialized,
             marketsList: new IMarket[](0)
         });
@@ -262,7 +264,6 @@ contract AugurPredicate is Initializable {
             lookupExit[exitId].status == ExitStatus.Initialized,
             "Predicate.startExit: Exit should be in Initialized state"
         );
-        lookupExit[exitId].status = ExitStatus.InProgress;
         withdrawManager.addExitToQueue(
             exitor,
             childOICash,
@@ -272,6 +273,8 @@ contract AugurPredicate is Initializable {
             false, // isRegularExit
             lookupExit[exitId].exitPriority
         );
+        lookupExit[exitId].status = ExitStatus.InProgress;
+        lookupExit[exitId].startExitTime = now;
     }
 
     function onFinalizeExit(bytes calldata data) external {
@@ -378,34 +381,35 @@ contract AugurPredicate is Initializable {
         uint256 age = withdrawManager.verifyInclusion(challengeData, 0 /* offset */, true /* verifyTxInclusion */);
         // this encoded data is compatible with rest of the matic predicates
         (address exitor,,uint256 exitId,,) = abi.decode(exit, (address, address, uint256, bytes32, bool));
-        if (age <= lookupExit[exitId].exitPriority) return false; // Providing an older tx results in an unsuccessful challenge
-        RLPReader.RLPItem[] memory _challengeData = challengeData.toRlpItem().toList();
-        bytes memory challengeTx = _challengeData[10].toBytes();
-        uint256 orderIndex = _challengeData[9].toUint();
-        return isValidDeprecationType1(challengeTx, exitor) || isValidDeprecationType2(challengeTx, exitor, orderIndex);
-    }
-
-    function isValidDeprecationType1(bytes memory txData, address signer) internal pure returns(bool) {
-        RLPReader.RLPItem[] memory txList = txData.toRlpItem().toList();
-        if (txList.length != 9) return false; // MALFORMED_TX
-        // address to = RLPReader.toAddress(txList[3]); // corresponds to "to" field in tx
-        // @todo assert that "to" belongs to a set of contracts on matic; txs to which qualify for state deprecations
-        (address _signer,) = getAddressFromTx(txList);
-        return _signer == signer;
-    }
-
-    function isValidDeprecationType2(bytes memory txData, address exitor, uint256 orderIndex) internal view returns(bool) {
-        RLPReader.RLPItem[] memory txList = txData.toRlpItem().toList();
-        if (txList.length != 9) return false; // MALFORMED_TX
-        address to = RLPReader.toAddress(txList[3]); // corresponds to "to" field in tx
         require(
-            to == predicateRegistry.zeroXTrade(),
-            "isValidDeprecationType2: challengeTx.to != zeroXTrade"
+            lookupExit[exitId].exitPriority < age,
+            "Need to provide a more recent transaction"
         );
-        bytes4 funcSig = BytesLib.toBytes4(BytesLib.slice(txData, 0, 4));
+        RLPReader.RLPItem[] memory _challengeData = challengeData.toRlpItem().toList();
+        uint256 orderIndex = _challengeData[9].toUint();
+        bytes memory challengeTx = _challengeData[10].toBytes();
+        return isValidDeprecationType1(challengeTx, exitor) || isValidDeprecationType2(challengeTx, orderIndex, exitor, exitId);
+    }
+
+    function isValidDeprecationType1(bytes memory txData, address exitor) internal view returns(bool) {
+        RLPReader.RLPItem[] memory txList = txData.toRlpItem().toList();
+        require(txList.length == 9, "MALFORMED_WITHDRAW_TX");
+        (address signer,) = getAddressFromTx(txList);
+        address to = RLPReader.toAddress(txList[3]);
+        return signer == exitor && predicateRegistry.belongsToStateDeprecationContractSet(to);
+    }
+
+    function isValidDeprecationType2(bytes memory txData, uint256 orderIndex, address exitor, uint256 exitId) internal view returns(bool) {
+        RLPReader.RLPItem[] memory txList = txData.toRlpItem().toList();
+        require(txList.length == 9, "MALFORMED_WITHDRAW_TX");
         require(
-            funcSig == 0x089042f7,
-            "isValidDeprecationType2: funcSig of challengeTx should match that of zeroxTrade.trade"
+            // txList[3] denotes the "to" field in the transaction
+            RLPReader.toAddress(txList[3]) == predicateRegistry.zeroXTrade(),
+            "challengeTx.to != zeroXTrade"
+        );
+        require(
+            BytesLib.toBytes4(BytesLib.slice(txData, 0, 4)) == 0x089042f7,
+            "funcSig of challengeTx should match that of zeroxTrade.trade"
         );
         (,,, IExchange.Order[] memory _orders, bytes[] memory _signatures) = abi.decode(
             BytesLib.slice(txData, 4, txData.length - 4),
@@ -414,20 +418,19 @@ contract AugurPredicate is Initializable {
         IExchange.Order memory order = _orders[orderIndex];
         require(
             order.makerAddress == exitor,
-            "isValidDeprecationType2: Order not signed by the exitor"
+            "Order not signed by the exitor"
+        );
+        require(
+            lookupExit[exitId].startExitTime <= order.expirationTimeSeconds,
+            "Order should not have expired"
         );
         IExchange _maticExchange = zeroXTrade.getExchangeFromAssetData(order.makerAssetData);
         ZeroXExchange exchange = ZeroXExchange(predicateRegistry.zeroXExchange(address(_maticExchange)));
         IExchange.OrderInfo memory orderInfo = exchange.getOrderInfo(order);
         require(
-            exchange.isValidSignature(
-                orderInfo.orderHash,
-                order.makerAddress,
-                _signatures[orderIndex]
-            ),
-            "isValidDeprecationType2: INVALID_ORDER_SIGNATURE"
+            exchange.isValidSignature(orderInfo.orderHash, order.makerAddress, _signatures[orderIndex]),
+            "INVALID_ORDER_SIGNATURE"
         );
-        // @todo Check order expiration
         return true;
     }
 
