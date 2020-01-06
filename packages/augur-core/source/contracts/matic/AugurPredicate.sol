@@ -296,8 +296,9 @@ contract AugurPredicate is Initializable {
             exitId, // exitAmountOrTokenId - think of exitId like a token Id
             bytes32(0), // txHash - field not required for now
             false, // isRegularExit
-            lookupExit[exitId].exitPriority
+            lookupExit[exitId].exitPriority << 1
         );
+        withdrawManager.addInput(lookupExit[exitId].exitPriority << 1, 0, exitor, address(oICash));
     }
 
     function onFinalizeExit(bytes calldata data) external {
@@ -391,9 +392,11 @@ contract AugurPredicate is Initializable {
         lookupExit[exitId].exitShareToken.setIsExecuting(isExecuting);
     }
 
+    event LOG(address indexed a, address indexed b, bool indexed c);
     function verifyDeprecation(bytes calldata exit, bytes calldata /* inputUtxo */, bytes calldata challengeData)
         external
-        view
+        // view
+        // pure
         returns (bool)
     {
         uint256 age = withdrawManager.verifyInclusion(challengeData, 0 /* offset */, true /* verifyTxInclusion */);
@@ -405,7 +408,6 @@ contract AugurPredicate is Initializable {
         );
 
         RLPReader.RLPItem[] memory _challengeData = challengeData.toRlpItem().toList();
-        uint256 orderIndex = _challengeData[9].toUint();
         bytes memory challengeTx = _challengeData[10].toBytes();
         RLPReader.RLPItem[] memory txList = challengeTx.toRlpItem().toList();
         require(txList.length == 9, "MALFORMED_WITHDRAW_TX");
@@ -415,10 +417,13 @@ contract AugurPredicate is Initializable {
             lookupExit[exitId].inFlightTxHash != txHash,
             "Cannot challenge with the exit tx itself"
         );
+        emit LOG(signer, exitor, predicateRegistry.belongsToStateDeprecationContractSet(to));
         if (signer == exitor) {
             return int256(txList[0].toUint()) > lookupExit[exitId].lastGoodNonce && predicateRegistry.belongsToStateDeprecationContractSet(to);
         }
-        return isValidDeprecation(challengeTx, to, orderIndex, exitor, exitId);
+        return false;
+        // uint256 orderIndex = _challengeData[9].toUint();
+        // return isValidDeprecation(challengeTx, to, orderIndex, exitor, exitId);
     }
 
     function isValidDeprecation(bytes memory txData, address to, uint256 orderIndex, address exitor, uint256 exitId) internal view returns(bool) {
