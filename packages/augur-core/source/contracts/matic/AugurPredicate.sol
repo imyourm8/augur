@@ -3,7 +3,6 @@ pragma experimental ABIEncoderV2;
 
 import { PredicateRegistry } from "ROOT/matic/PredicateRegistry.sol";
 import { BytesLib } from "ROOT/matic/libraries/BytesLib.sol";
-import { Common } from "ROOT/matic/libraries/Common.sol";
 import { RLPEncode } from "ROOT/matic/libraries/RLPEncode.sol";
 import { RLPReader } from "ROOT/matic/libraries/RLPReader.sol";
 import { IWithdrawManager } from "ROOT/matic/plasma/IWithdrawManager.sol";
@@ -251,7 +250,7 @@ contract AugurPredicate is Initializable {
         RLPReader.RLPItem[] memory txList = txData.toRlpItem().toList();
         require(txList.length == 9, "MALFORMED_WITHDRAW_TX");
         TradeData memory trade;
-        (trade.taker, lookupExit[exitId].inFlightTxHash) = Common.getAddressFromTx(txList); // signer of the tx is the taker; akin to taker being msg.sender
+        (trade.taker, lookupExit[exitId].inFlightTxHash) = erc20Predicate.getAddressFromTx(txData); // signer of the tx is the taker; akin to taker being msg.sender
         if (trade.taker == msg.sender) {
             lookupExit[exitId].lastGoodNonce = int256(txList[0].toUint()) - 1;
         }
@@ -392,11 +391,9 @@ contract AugurPredicate is Initializable {
         lookupExit[exitId].exitShareToken.setIsExecuting(isExecuting);
     }
 
-    event LOG(address indexed a, address indexed b, bool indexed c);
     function verifyDeprecation(bytes calldata exit, bytes calldata /* inputUtxo */, bytes calldata challengeData)
         external
-        // view
-        // pure
+        view
         returns (bool)
     {
         uint256 age = withdrawManager.verifyInclusion(challengeData, 0 /* offset */, true /* verifyTxInclusion */);
@@ -412,18 +409,16 @@ contract AugurPredicate is Initializable {
         RLPReader.RLPItem[] memory txList = challengeTx.toRlpItem().toList();
         require(txList.length == 9, "MALFORMED_WITHDRAW_TX");
         address to = RLPReader.toAddress(txList[3]);
-        (address signer, bytes32 txHash) = Common.getAddressFromTx(txList);
+        (address signer, bytes32 txHash) = erc20Predicate.getAddressFromTx(challengeTx);
         require(
             lookupExit[exitId].inFlightTxHash != txHash,
             "Cannot challenge with the exit tx itself"
         );
-        emit LOG(signer, exitor, predicateRegistry.belongsToStateDeprecationContractSet(to));
         if (signer == exitor) {
             return int256(txList[0].toUint()) > lookupExit[exitId].lastGoodNonce && predicateRegistry.belongsToStateDeprecationContractSet(to);
         }
-        return false;
-        // uint256 orderIndex = _challengeData[9].toUint();
-        // return isValidDeprecation(challengeTx, to, orderIndex, exitor, exitId);
+        uint256 orderIndex = _challengeData[9].toUint();
+        return isValidDeprecation(RLPReader.toBytes(txList[5]), to, orderIndex, exitor, exitId);
     }
 
     function isValidDeprecation(bytes memory txData, address to, uint256 orderIndex, address exitor, uint256 exitId) internal view returns(bool) {

@@ -12,6 +12,7 @@ contract AugurPredicateTest is AugurPredicate {
             "Predicate.claimBalanceFaucet: Please call initializeForExit first"
         );
         address _rootMarket = _checkAndAddMaticMarket(exitId, market);
+        lookupExit[exitId].exitPriority = now; // dummy
         setIsExecuting(exitId, true);
         lookupExit[exitId].exitShareToken.mint(to, _rootMarket, outcome, balance);
         setIsExecuting(exitId, false);
@@ -23,6 +24,7 @@ contract AugurPredicateTest is AugurPredicate {
             address(lookupExit[exitId].exitShareToken) != address(0x0),
             "Predicate.claimCashBalance: Please call initializeForExit first"
         );
+        lookupExit[exitId].exitPriority = now; // dummy
         setIsExecuting(exitId, true);
         lookupExit[exitId].exitCash.joinMint(participant, amount);
         setIsExecuting(exitId, false);
