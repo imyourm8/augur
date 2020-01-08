@@ -29,7 +29,6 @@ contract AugurPredicate is Initializable {
 
     bytes32 constant internal SHARE_TOKEN_BALANCE_CHANGED_EVENT_SIG = 0x350ea32dc29530b9557420816d743c436f8397086f98c96292138edd69e01cb3;
     uint256 constant internal MAX_LOGS = 100;
-    bytes constant public networkId = "0x3A99";
 
     PredicateRegistry public predicateRegistry;
     IWithdrawManager public withdrawManager;
