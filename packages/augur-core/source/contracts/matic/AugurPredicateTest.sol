@@ -12,7 +12,22 @@ contract AugurPredicateTest is AugurPredicate {
             "Predicate.claimBalanceFaucet: Please call initializeForExit first"
         );
         address _rootMarket = _checkAndAddMaticMarket(exitId, market);
+        lookupExit[exitId].exitPriority = now; // dummy
+        setIsExecuting(exitId, true);
         lookupExit[exitId].exitShareToken.mint(to, _rootMarket, outcome, balance);
+        setIsExecuting(exitId, false);
+    }
+
+    function claimCashBalanceFaucet(uint256 amount, address participant) external {
+        uint256 exitId = getExitId(msg.sender);
+        require(
+            address(lookupExit[exitId].exitShareToken) != address(0x0),
+            "Predicate.claimCashBalance: Please call initializeForExit first"
+        );
+        lookupExit[exitId].exitPriority = now; // dummy
+        setIsExecuting(exitId, true);
+        lookupExit[exitId].exitCash.joinMint(participant, amount);
+        setIsExecuting(exitId, false);
     }
 
     // we could consider actually giving this option to the user

@@ -11,4 +11,5 @@ contract IWithdrawManager {
       bool isRegularExit,
       uint256 priority)
     external;
+  function addInput(uint256 exitId, uint256 age, address utxoOwner, address token) external;
 }

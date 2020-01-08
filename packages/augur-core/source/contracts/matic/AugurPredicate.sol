@@ -3,8 +3,10 @@ pragma experimental ABIEncoderV2;
 
 import { PredicateRegistry } from "ROOT/matic/PredicateRegistry.sol";
 import { BytesLib } from "ROOT/matic/libraries/BytesLib.sol";
+import { RLPEncode } from "ROOT/matic/libraries/RLPEncode.sol";
 import { RLPReader } from "ROOT/matic/libraries/RLPReader.sol";
 import { IWithdrawManager } from "ROOT/matic/plasma/IWithdrawManager.sol";
+import { IErc20Predicate } from "ROOT/matic/plasma/IErc20Predicate.sol";
 
 import { IShareToken } from "ROOT/reporting/IShareToken.sol";
 import { OICash } from "ROOT/reporting/OICash.sol";
@@ -14,6 +16,7 @@ import { IZeroXTrade } from "ROOT/trading/IZeroXTrade.sol";
 import { IAugurTrading } from "ROOT/trading/IAugurTrading.sol";
 import { IAugur } from "ROOT/IAugur.sol";
 import { Cash } from "ROOT/Cash.sol";
+import { ZeroXExchange } from "ROOT/ZeroXExchange.sol";
 import { Initializable } from "ROOT/libraries/Initializable.sol";
 import { SafeMathUint256 } from "ROOT/libraries/math/SafeMathUint256.sol";
 
@@ -24,11 +27,12 @@ contract AugurPredicate is Initializable {
 
     event ExitFinalized(uint256 indexed exitId,  address indexed exitor);
 
-    bytes32 constant SHARE_TOKEN_BALANCE_CHANGED_EVENT_SIG = 0x350ea32dc29530b9557420816d743c436f8397086f98c96292138edd69e01cb3;
-    uint256 MAX_LOGS = 100;
+    bytes32 constant internal SHARE_TOKEN_BALANCE_CHANGED_EVENT_SIG = 0x350ea32dc29530b9557420816d743c436f8397086f98c96292138edd69e01cb3;
+    uint256 constant internal MAX_LOGS = 100;
 
     PredicateRegistry public predicateRegistry;
     IWithdrawManager public withdrawManager;
+    IErc20Predicate public erc20Predicate;
 
     IAugur public augur;
     IShareToken public augurShareToken;
@@ -40,13 +44,26 @@ contract AugurPredicate is Initializable {
     mapping(address => bool) claimedTradingProceeds;
     uint256 private constant MAX_APPROVAL_AMOUNT = 2 ** 256 - 1;
 
+    enum ExitStatus { Invalid, Initialized, InFlightExecuted, InProgress, Finalized }
     struct ExitData {
         IShareToken exitShareToken;
         Cash exitCash;
         uint256 exitPriority;
-        bool exitInitiated;
+        uint256 startExitTime;
+        int256 lastGoodNonce;
+        bytes32 inFlightTxHash;
+        ExitStatus status;
         IMarket[] marketsList;
         mapping(address => bool) markets;
+    }
+
+    struct TradeData {
+        uint256 requestedFillAmount;
+        address affiliateAddress;
+        bytes32 tradeGroupId;
+        IExchange.Order[] orders;
+        bytes[] signatures;
+        address taker;
     }
 
     mapping(uint256 => ExitData) public lookupExit;
@@ -60,12 +77,14 @@ contract AugurPredicate is Initializable {
     function initializeForMatic(
         PredicateRegistry _predicateRegistry,
         IWithdrawManager _withdrawManager,
+        IErc20Predicate _erc20Predicate,
         OICash _oICash,
         address _childOICash,
         IAugur _mainAugur
     ) public /* @todo make part of initialize() */ {
         predicateRegistry = _predicateRegistry;
         withdrawManager = _withdrawManager;
+        erc20Predicate = _erc20Predicate;
         oICash = _oICash;
         childOICash = _childOICash;
         augurCash = Cash(_mainAugur.lookup("Cash"));
@@ -96,6 +115,10 @@ contract AugurPredicate is Initializable {
      */
     function initializeForExit(IShareToken _exitShareToken, Cash _exitCash) external returns(uint256 exitId) {
         exitId = getExitId(msg.sender);
+        require(
+            lookupExit[exitId].status == ExitStatus.Invalid,
+            "Predicate.initializeForExit: Exit is already initialized"
+        );
 
         // IShareToken _exitShareToken = new ShareToken();
         // Cash cash = new Cash();
@@ -107,7 +130,10 @@ contract AugurPredicate is Initializable {
             exitShareToken: _exitShareToken,
             exitCash: _exitCash,
             exitPriority: 0,
-            exitInitiated: false,
+            startExitTime: 0,
+            lastGoodNonce: -1,
+            inFlightTxHash: bytes32(0),
+            status: ExitStatus.Initialized,
             marketsList: new IMarket[](0)
         });
     }
@@ -129,7 +155,7 @@ contract AugurPredicate is Initializable {
     function claimShareBalance(bytes calldata data) external {
         uint256 exitId = getExitId(msg.sender);
         require(
-            address(lookupExit[exitId].exitShareToken) != address(0x0),
+            lookupExit[exitId].status == ExitStatus.Initialized,
             "Predicate.claimShareBalance: Please call initializeForExit first"
         );
         RLPReader.RLPItem[] memory referenceTxData = data.toRlpItem().toList();
@@ -154,7 +180,40 @@ contract AugurPredicate is Initializable {
         uint256 outcome = BytesLib.toUint(logData, 0);
         uint256 balance = BytesLib.toUint(logData, 32);
         address _rootMarket = _checkAndAddMaticMarket(exitId, market);
+        setIsExecuting(exitId, true);
         lookupExit[exitId].exitShareToken.mint(account, _rootMarket, outcome, balance);
+        setIsExecuting(exitId, false);
+    }
+
+    /**
+     * @notice Prove receipt and index of the log (Deposit, Withdraw, LogTransfer) in the receipt to claim balance from Matic
+     * @param data RLP encoded data of the reference tx (proof-of-funds) that encodes the following fields
+      * headerNumber Header block number of which the reference tx was a part of
+      * blockProof Proof that the block header (in the child chain) is a leaf in the submitted merkle root
+      * blockNumber Block number of which the reference tx is a part of
+      * blockTime Reference tx block time
+      * blocktxRoot Transactions root of block
+      * blockReceiptsRoot Receipts root of block
+      * receipt Receipt of the reference transaction
+      * receiptProof Merkle proof of the reference receipt
+      * branchMask Merkle proof branchMask for the receipt
+      * logIndex Log Index to read from the receipt
+     * @param participant Account for which the proof-of-funds is being provided
+     */
+    function claimCashBalance(bytes calldata data, address participant) external {
+        uint256 exitId = getExitId(msg.sender);
+        require(
+            lookupExit[exitId].status == ExitStatus.Initialized,
+            "Predicate.claimCashBalance: Please call initializeForExit first"
+        );
+        bytes memory _preState = erc20Predicate.interpretStateUpdate(abi.encode(data, participant, true /* verifyInclusionInCheckpoint */, false /* isChallenge */));
+        (uint256 closingBalance, uint256 age,,) = abi.decode(_preState, (uint256, uint256, address, address));
+        // (uint256 closingBalance, uint256 age,,address maticCashAddress) = abi.decode(_preState, (uint256, uint256, address, address));
+        // @todo Validate maticCashAddress
+        lookupExit[exitId].exitPriority = lookupExit[exitId].exitPriority.max(age);
+        setIsExecuting(exitId, true);
+        lookupExit[exitId].exitCash.joinMint(participant, closingBalance);
+        setIsExecuting(exitId, false);
     }
 
     function _checkAndAddMaticMarket(uint256 exitId, address market) internal returns(address) {
@@ -172,38 +231,48 @@ contract AugurPredicate is Initializable {
         return _rootMarket;
     }
 
-    /**
-    * @dev Start exit with a zeroX trade
-    * @param _taker Order filler
-    */
-    function trade(
-        uint256 _requestedFillAmount,
-        address _affiliateAddress,
-        bytes32 _tradeGroupId,
-        IExchange.Order[] memory _orders,
-        bytes[] memory _signatures,
-        address _taker
-    )
-        public
-        payable
-    {
-        // @todo Handle case where the exitor is exiting with a trade filled by someone else (exitor had a signed order)
-        require(
-            _taker == msg.sender,
-            "Exitor is not the order taker"
-        );
+    function claimLastGoodNonce(bytes calldata lastCheckpointedTx) external {
+        uint256 age = withdrawManager.verifyInclusion(lastCheckpointedTx, 0 /* offset */, true /* verifyTxInclusion */);
+        uint256 exitId = getExitId(msg.sender);
+        lookupExit[exitId].exitPriority = lookupExit[exitId].exitPriority.max(age);
+        RLPReader.RLPItem[] memory txList = lastCheckpointedTx.toRlpItem().toList();
+        lookupExit[exitId].lastGoodNonce = int256(txList[0].toUint());
+    }
+
+    function executeTrade(bytes memory txData) public payable {
         uint256 exitId = getExitId(msg.sender);
         require(
-            address(lookupExit[exitId].exitShareToken) != address(0x0),
-            "Predicate.trade: Please call initializeForExit first"
+            lookupExit[exitId].status == ExitStatus.Initialized,
+            "Predicate.executeTrade: Exit should be in Initialized state"
         );
-
+        lookupExit[exitId].status == ExitStatus.InFlightExecuted; // this ensures only 1 in-flight tx can be replayed on-chain
+        RLPReader.RLPItem[] memory txList = txData.toRlpItem().toList();
+        require(txList.length == 9, "MALFORMED_WITHDRAW_TX");
+        TradeData memory trade;
+        (trade.taker, lookupExit[exitId].inFlightTxHash) = erc20Predicate.getAddressFromTx(txData); // signer of the tx is the taker; akin to taker being msg.sender
+        if (trade.taker == msg.sender) {
+            lookupExit[exitId].lastGoodNonce = int256(txList[0].toUint()) - 1;
+        }
+        require(
+            // txList[3] denotes the "to" field in the transaction
+            RLPReader.toAddress(txList[3]) == predicateRegistry.zeroXTrade(),
+            "challengeTx.to != zeroXTrade"
+        );
+        txData = RLPReader.toBytes(txList[5]);
+        require(
+            BytesLib.toBytes4(BytesLib.slice(txData, 0, 4)) == 0x089042f7,
+            "funcSig should match that of zeroxTrade.trade"
+        );
+        (trade.requestedFillAmount, trade.affiliateAddress, trade.tradeGroupId, trade.orders, trade.signatures) = abi.decode(
+            BytesLib.slice(txData, 4, txData.length - 4),
+            (uint256, address, bytes32, IExchange.Order[], bytes[])
+        );
         setIsExecuting(exitId, true);
         zeroXTrade.trade.value(msg.value)(
-            _requestedFillAmount,
-            _affiliateAddress,
-            _tradeGroupId, _orders, _signatures,
-            _taker,
+            trade.requestedFillAmount,
+            trade.affiliateAddress,
+            trade.tradeGroupId, trade.orders, trade.signatures,
+            trade.taker,
             abi.encode(lookupExit[exitId].exitShareToken, lookupExit[exitId].exitCash)
         );
         setIsExecuting(exitId, false);
@@ -213,14 +282,11 @@ contract AugurPredicate is Initializable {
         address exitor = msg.sender;
         uint256 exitId = getExitId(exitor);
         require(
-            address(lookupExit[exitId].exitShareToken) != address(0x0),
-            "Predicate.startExit: Please call initializeForExit first"
+            lookupExit[exitId].status == ExitStatus.Initialized || lookupExit[exitId].status == ExitStatus.InFlightExecuted,
+            "Predicate.startExit: Exit should be in Initialized or InFlightExecuted state"
         );
-        require(
-            lookupExit[exitId].exitInitiated == false,
-            "Predicate.startExit: Exit is already initiated"
-        );
-        lookupExit[exitId].exitInitiated = true;
+        lookupExit[exitId].status = ExitStatus.InProgress;
+        lookupExit[exitId].startExitTime = now;
         withdrawManager.addExitToQueue(
             exitor,
             childOICash,
@@ -228,8 +294,9 @@ contract AugurPredicate is Initializable {
             exitId, // exitAmountOrTokenId - think of exitId like a token Id
             bytes32(0), // txHash - field not required for now
             false, // isRegularExit
-            lookupExit[exitId].exitPriority
+            lookupExit[exitId].exitPriority << 1
         );
+        withdrawManager.addInput(lookupExit[exitId].exitPriority << 1, 0, exitor, address(oICash));
     }
 
     function onFinalizeExit(bytes calldata data) external {
@@ -239,33 +306,35 @@ contract AugurPredicate is Initializable {
         );
         // this encoded data is compatible with rest of the matic predicates
         (,,address exitor,uint256 exitId) = abi.decode(data, (uint256, address, address, uint256));
-        for(uint256 i = 0; i < lookupExit[exitId].marketsList.length; i++) {
+        uint256 payout;
+        for (uint256 i = 0; i < lookupExit[exitId].marketsList.length; i++) {
             IMarket market = IMarket(lookupExit[exitId].marketsList[i]);
             if (market.isFinalized()) {
-                processExitForFinalizedMarket(market, exitor, exitId);
+                payout = payout.add(processExitForFinalizedMarket(market, exitor, exitId));
             } else {
                 processExitForMarket(market, exitor, exitId);
             }
         }
+        payout = payout.add(lookupExit[exitId].exitCash.balanceOf(exitor));
+        (bool _success, uint256 _feesOwed) = oICash.withdraw(payout);
+        require(_success, "OICash.Withdraw failed");
+        lookupExit[exitId].status = ExitStatus.Finalized;
+        if (payout > _feesOwed) {
+            require(
+                augurCash.transfer(exitor, payout - _feesOwed),
+                "Cash transfer failed"
+            );
+        }
         emit ExitFinalized(exitId, exitor);
     }
 
-    function processExitForFinalizedMarket(IMarket market, address exitor, uint256 exitId) internal {
+    function processExitForFinalizedMarket(IMarket market, address exitor, uint256 exitId) internal returns(uint256) {
         claimTradingProceeds(market);
 
         // since trading proceeds have been called, predicate has 0 shares for all outcomes;
         // so the exitor will get the payout for the shares
 
-        uint256 payout = calculateProceeds(market, exitor, exitId);
-        if (payout == 0) return;
-
-        (bool _success, uint256 _feesOwed) = oICash.withdraw(payout);
-        require(_success, "OICash.Withdraw failed");
-        if (payout <= _feesOwed) return;
-        require(
-            augurCash.transfer(exitor, payout - _feesOwed),
-            "Cash transfer failed"
-        );
+        return calculateProceeds(market, exitor, exitId);
     }
 
     function claimTradingProceeds(IMarket market) public {
@@ -284,7 +353,6 @@ contract AugurPredicate is Initializable {
         }
         return payout;
     }
-
 
     function processExitForMarket(IMarket market, address exitor, uint256 exitId) internal {
         uint256 numOutcomes = market.getNumberOfOutcomes();
@@ -320,5 +388,67 @@ contract AugurPredicate is Initializable {
     function setIsExecuting(uint256 exitId, bool isExecuting) internal {
         lookupExit[exitId].exitCash.setIsExecuting(isExecuting);
         lookupExit[exitId].exitShareToken.setIsExecuting(isExecuting);
+    }
+
+    function verifyDeprecation(bytes calldata exit, bytes calldata /* inputUtxo */, bytes calldata challengeData)
+        external
+        view
+        returns (bool)
+    {
+        uint256 age = withdrawManager.verifyInclusion(challengeData, 0 /* offset */, true /* verifyTxInclusion */);
+        // this encoded data is compatible with rest of the matic predicates
+        (address exitor,,uint256 exitId,,) = abi.decode(exit, (address, address, uint256, bytes32, bool));
+        require(
+            lookupExit[exitId].exitPriority < age,
+            "Need to provide a more recent transaction"
+        );
+
+        RLPReader.RLPItem[] memory _challengeData = challengeData.toRlpItem().toList();
+        bytes memory challengeTx = _challengeData[10].toBytes();
+        RLPReader.RLPItem[] memory txList = challengeTx.toRlpItem().toList();
+        require(txList.length == 9, "MALFORMED_WITHDRAW_TX");
+        address to = RLPReader.toAddress(txList[3]);
+        (address signer, bytes32 txHash) = erc20Predicate.getAddressFromTx(challengeTx);
+        require(
+            lookupExit[exitId].inFlightTxHash != txHash,
+            "Cannot challenge with the exit tx itself"
+        );
+        if (signer == exitor) {
+            return int256(txList[0].toUint()) > lookupExit[exitId].lastGoodNonce && predicateRegistry.belongsToStateDeprecationContractSet(to);
+        }
+        uint256 orderIndex = _challengeData[9].toUint();
+        return isValidDeprecation(RLPReader.toBytes(txList[5]), to, orderIndex, exitor, exitId);
+    }
+
+    function isValidDeprecation(bytes memory txData, address to, uint256 orderIndex, address exitor, uint256 exitId) internal view returns(bool) {
+        require(
+            to == predicateRegistry.zeroXTrade(),
+            "challengeTx.to != zeroXTrade"
+        );
+        require(
+            BytesLib.toBytes4(BytesLib.slice(txData, 0, 4)) == 0x089042f7,
+            "funcSig of challengeTx should match that of zeroxTrade.trade"
+        );
+        (,,, IExchange.Order[] memory _orders, bytes[] memory _signatures) = abi.decode(
+            BytesLib.slice(txData, 4, txData.length - 4),
+            (uint256, address, bytes32, IExchange.Order[], bytes[])
+        );
+        IExchange.Order memory order = _orders[orderIndex];
+        require(
+            order.makerAddress == exitor,
+            "Order not signed by the exitor"
+        );
+        require(
+            lookupExit[exitId].startExitTime <= order.expirationTimeSeconds,
+            "Order should not have expired"
+        );
+        IExchange _maticExchange = zeroXTrade.getExchangeFromAssetData(order.makerAssetData);
+        ZeroXExchange exchange = ZeroXExchange(predicateRegistry.zeroXExchange(address(_maticExchange)));
+        IExchange.OrderInfo memory orderInfo = exchange.getOrderInfo(order);
+        require(
+            exchange.isValidSignature(orderInfo.orderHash, order.makerAddress, _signatures[orderIndex]),
+            "INVALID_ORDER_SIGNATURE"
+        );
+        return true;
     }
 }

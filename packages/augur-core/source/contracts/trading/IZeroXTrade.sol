@@ -26,4 +26,5 @@ contract IZeroXTrade {
         address _taker,
         bytes memory _extraData
     ) public payable returns (uint256);
+    function getExchangeFromAssetData(bytes memory _assetData) public pure returns (IExchange _exchange);
 }
