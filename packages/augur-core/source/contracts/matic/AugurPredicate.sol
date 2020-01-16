@@ -441,7 +441,20 @@ contract AugurPredicate is Initializable {
             "Cannot challenge with the exit tx itself"
         );
         if (signer == exitor) {
-            return int256(txList[0].toUint()) > lookupExit[exitId].lastGoodNonce && predicateRegistry.belongsToStateDeprecationContractSet(to);
+            if (int256(txList[0].toUint()) <= lookupExit[exitId].lastGoodNonce) {
+                return false;
+            }
+            if (predicateRegistry.belongsToStateDeprecationContractSet(to)) {
+                return true;
+            } else if (to == predicateRegistry.maticShareToken()) {
+                return shareTokenPredicate.isValidDeprecation(RLPReader.toBytes(txList[5]));
+            } else if (to == predicateRegistry.maticCash()) {
+                bytes memory txData = RLPReader.toBytes(txList[5]);
+                bytes4 funcSig = BytesLib.toBytes4(BytesLib.slice(txData, 0, 4));
+                if (funcSig == TRANSFER_FUNC_SIG || funcSig == BURN_FUNC_SIG) {
+                    return true;
+                }
+            }
         }
         uint256 orderIndex = _challengeData[9].toUint();
         return isValidDeprecation(RLPReader.toBytes(txList[5]), to, orderIndex, exitor, exitId);

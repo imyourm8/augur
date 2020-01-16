@@ -1,29 +1,19 @@
 pragma solidity 0.5.10;
-// pragma experimental ABIEncoderV2;
+pragma experimental ABIEncoderV2;
 
 import { PredicateRegistry } from "ROOT/matic/PredicateRegistry.sol";
 import { BytesLib } from "ROOT/matic/libraries/BytesLib.sol";
 import { RLPEncode } from "ROOT/matic/libraries/RLPEncode.sol";
 import { RLPReader } from "ROOT/matic/libraries/RLPReader.sol";
 import { IWithdrawManager } from "ROOT/matic/plasma/IWithdrawManager.sol";
-// import { IErc20Predicate } from "ROOT/matic/plasma/IErc20Predicate.sol";
 
 import { IShareToken } from "ROOT/reporting/IShareToken.sol";
-// import { OICash } from "ROOT/reporting/OICash.sol";
 import { IMarket } from "ROOT/reporting/IMarket.sol";
-// import { IExchange } from "ROOT/external/IExchange.sol";
-// import { IZeroXTrade } from "ROOT/trading/IZeroXTrade.sol";
-// import { IAugurTrading } from "ROOT/trading/IAugurTrading.sol";
-// import { IAugur } from "ROOT/IAugur.sol";
-// import { Cash } from "ROOT/Cash.sol";
-// import { ZeroXExchange } from "ROOT/ZeroXExchange.sol";
 import { Initializable } from "ROOT/libraries/Initializable.sol";
-// import { SafeMathUint256 } from "ROOT/libraries/math/SafeMathUint256.sol";
 
 contract ShareTokenPredicate is Initializable {
     using RLPReader for bytes;
     using RLPReader for RLPReader.RLPItem;
-    // using SafeMathUint256 for uint256;
 
     event ExitFinalized(uint256 indexed exitId,  address indexed exitor);
 
@@ -32,16 +22,6 @@ contract ShareTokenPredicate is Initializable {
 
     PredicateRegistry public predicateRegistry;
     IWithdrawManager public withdrawManager;
-    // IErc20Predicate public erc20Predicate;
-
-    // IAugur public augur;
-    // IShareToken public augurShareToken;
-    // IZeroXTrade public zeroXTrade;
-    // Cash public augurCash;
-    // OICash public oICash;
-    // address public childOICash;
-
-    // mapping(address => bool) claimedTradingProceeds;
 
     // keccak256('unsafeTransferFrom(address,address,uint256,uint256)').slice(0, 4)
     bytes4 constant UNSAFE_TRANSFER_FROM_FUNC_SIG = 0xa9059cbb; // @todo write the correct sig
@@ -120,6 +100,13 @@ contract ShareTokenPredicate is Initializable {
         }
     }
 
+    function isValidDeprecation(bytes memory txData) public pure returns(bool) {
+        bytes4 funcSig = BytesLib.toBytes4(BytesLib.slice(txData, 0, 4));
+        if (funcSig == UNSAFE_TRANSFER_FROM_FUNC_SIG || funcSig == UNSAFE_BATCH_TRANSFER_FROM_FUNC_SIG) {
+            return true;
+        }
+    }
+
     function repackageTokenIds(uint256[] memory _tokenIds) internal view returns (uint256[] memory tokenIds) {
         tokenIds = new uint256[](_tokenIds.length);
         for (uint256 i = 0; i < _tokenIds.length; i++) {
@@ -137,14 +124,14 @@ contract ShareTokenPredicate is Initializable {
         return getTokenId(IMarket(_rootMarket), _outcome);
     }
 
-    function getTokenId(IMarket _market, uint256 _outcome) public pure returns (uint256 _tokenId) {
+    function getTokenId(IMarket _market, uint256 _outcome) internal pure returns (uint256 _tokenId) {
         bytes memory _tokenIdBytes = abi.encodePacked(_market, uint8(_outcome));
         assembly {
             _tokenId := mload(add(_tokenIdBytes, add(0x20, 0)))
         }
     }
 
-    function unpackTokenId(uint256 _tokenId) public pure returns (address _market, uint256 _outcome) {
+    function unpackTokenId(uint256 _tokenId) internal pure returns (address _market, uint256 _outcome) {
         assembly {
             _market := shr(96,  and(_tokenId, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF000000000000000000000000))
             _outcome := shr(88, and(_tokenId, 0x0000000000000000000000000000000000000000FF0000000000000000000000))
