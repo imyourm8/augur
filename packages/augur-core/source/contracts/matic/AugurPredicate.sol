@@ -7,6 +7,7 @@ import { RLPEncode } from "ROOT/matic/libraries/RLPEncode.sol";
 import { RLPReader } from "ROOT/matic/libraries/RLPReader.sol";
 import { IWithdrawManager } from "ROOT/matic/plasma/IWithdrawManager.sol";
 import { IErc20Predicate } from "ROOT/matic/plasma/IErc20Predicate.sol";
+import { ShareTokenPredicate } from "ROOT/matic/ShareTokenPredicate.sol";
 
 import { IShareToken } from "ROOT/reporting/IShareToken.sol";
 import { OICash } from "ROOT/reporting/OICash.sol";
@@ -27,12 +28,12 @@ contract AugurPredicate is Initializable {
 
     event ExitFinalized(uint256 indexed exitId,  address indexed exitor);
 
-    bytes32 constant internal SHARE_TOKEN_BALANCE_CHANGED_EVENT_SIG = 0x350ea32dc29530b9557420816d743c436f8397086f98c96292138edd69e01cb3;
     uint256 constant internal MAX_LOGS = 100;
 
     PredicateRegistry public predicateRegistry;
     IWithdrawManager public withdrawManager;
     IErc20Predicate public erc20Predicate;
+    ShareTokenPredicate public shareTokenPredicate;
 
     IAugur public augur;
     IShareToken public augurShareToken;
@@ -43,6 +44,11 @@ contract AugurPredicate is Initializable {
 
     mapping(address => bool) claimedTradingProceeds;
     uint256 private constant MAX_APPROVAL_AMOUNT = 2 ** 256 - 1;
+
+    // keccak256('transfer(address,uint256)').slice(0, 4)
+    bytes4 constant TRANSFER_FUNC_SIG = 0xa9059cbb;
+    // keccak256('joinBurn(address,uint256)').slice(0, 4)
+    bytes4 constant BURN_FUNC_SIG = 0xa9059cbb; // @todo write the correct sig
 
     enum ExitStatus { Invalid, Initialized, InFlightExecuted, InProgress, Finalized }
     struct ExitData {
@@ -80,7 +86,8 @@ contract AugurPredicate is Initializable {
         IErc20Predicate _erc20Predicate,
         OICash _oICash,
         address _childOICash,
-        IAugur _mainAugur
+        IAugur _mainAugur,
+        ShareTokenPredicate _shareTokenPredicate
     ) public /* @todo make part of initialize() */ {
         predicateRegistry = _predicateRegistry;
         withdrawManager = _withdrawManager;
@@ -88,6 +95,7 @@ contract AugurPredicate is Initializable {
         oICash = _oICash;
         childOICash = _childOICash;
         augurCash = Cash(_mainAugur.lookup("Cash"));
+        shareTokenPredicate = _shareTokenPredicate;
         augurShareToken = IShareToken(_mainAugur.lookup("ShareToken"));
         // The allowance may eventually run out, @todo provide a mechanism to refresh this allowance
         require(
@@ -139,7 +147,7 @@ contract AugurPredicate is Initializable {
     }
 
     /**
-     * @notice Prove receipt and index of the log (ShareTokenBalanceChanged) in the receipt to claim balance from Matic
+     * @notice Proof receipt and index of the log (ShareTokenBalanceChanged) in the receipt to claim balance from Matic
      * @param data RLP encoded data of the reference tx (proof-of-funds) that encodes the following fields
       * headerNumber Header block number of which the reference tx was a part of
       * blockProof Proof that the block header (in the child chain) is a leaf in the submitted merkle root
@@ -158,35 +166,16 @@ contract AugurPredicate is Initializable {
             lookupExit[exitId].status == ExitStatus.Initialized,
             "Predicate.claimShareBalance: Please call initializeForExit first"
         );
-        RLPReader.RLPItem[] memory referenceTxData = data.toRlpItem().toList();
-        bytes memory receipt = referenceTxData[6].toBytes();
-        RLPReader.RLPItem[] memory inputItems = receipt.toRlpItem().toList();
-        uint256 logIndex = referenceTxData[9].toUint();
-        require(logIndex < MAX_LOGS, "Supporting a max of 100 logs");
-        uint256 age = withdrawManager.verifyInclusion(data, 0 /* offset */, false /* verifyTxInclusion */);
-        lookupExit[exitId].exitPriority = lookupExit[exitId].exitPriority.max(age);
-        inputItems = inputItems[3].toList()[logIndex].toList(); // select log based on given logIndex
-        bytes memory logData = inputItems[2].toBytes();
-        inputItems = inputItems[1].toList(); // topics
-        // now, inputItems[i] refers to i-th (0-based) topic in the topics array
-        // event ShareTokenBalanceChanged(address indexed universe, address indexed account, address indexed market, uint256 outcome, uint256 balance);
-        require(
-            bytes32(inputItems[0].toUint()) == SHARE_TOKEN_BALANCE_CHANGED_EVENT_SIG,
-            "Predicate.claimShareBalance: Not ShareTokenBalanceChanged event signature"
-        );
-        // inputItems[1] is the universe
-        address account = address(inputItems[2].toUint());
-        address market = address(inputItems[3].toUint());
-        uint256 outcome = BytesLib.toUint(logData, 0);
-        uint256 balance = BytesLib.toUint(logData, 32);
-        address _rootMarket = _checkAndAddMaticMarket(exitId, market);
+        (address account, address market, uint256 outcome, uint256 balance, uint256 age) = shareTokenPredicate.parseData(data);
+        address rootMarket = _checkAndAddMaticMarket(exitId, market);
         setIsExecuting(exitId, true);
-        lookupExit[exitId].exitShareToken.mint(account, _rootMarket, outcome, balance);
+        lookupExit[exitId].exitPriority = lookupExit[exitId].exitPriority.max(age);
+        lookupExit[exitId].exitShareToken.mint(account, rootMarket, outcome, balance);
         setIsExecuting(exitId, false);
     }
 
     /**
-     * @notice Prove receipt and index of the log (Deposit, Withdraw, LogTransfer) in the receipt to claim balance from Matic
+     * @notice Proof receipt and index of the log (Deposit, Withdraw, LogTransfer) in the receipt to claim balance from Matic
      * @param data RLP encoded data of the reference tx (proof-of-funds) that encodes the following fields
       * headerNumber Header block number of which the reference tx was a part of
       * blockProof Proof that the block header (in the child chain) is a leaf in the submitted merkle root
@@ -239,25 +228,42 @@ contract AugurPredicate is Initializable {
         lookupExit[exitId].lastGoodNonce = int256(txList[0].toUint());
     }
 
-    function executeTrade(bytes memory txData) public payable {
+    function executeInFlightTransaction(bytes memory txData) public payable {
         uint256 exitId = getExitId(msg.sender);
         require(
             lookupExit[exitId].status == ExitStatus.Initialized,
-            "Predicate.executeTrade: Exit should be in Initialized state"
+            "executeInFlightTransaction: Exit should be in Initialized state"
         );
         lookupExit[exitId].status == ExitStatus.InFlightExecuted; // this ensures only 1 in-flight tx can be replayed on-chain
         RLPReader.RLPItem[] memory txList = txData.toRlpItem().toList();
         require(txList.length == 9, "MALFORMED_WITHDRAW_TX");
+        uint256 nonce = txList[0].toUint();
+        address to = RLPReader.toAddress(txList[3]); // txList[3] denotes the "to" field in the transaction
+        address signer;
+        (signer, lookupExit[exitId].inFlightTxHash) = erc20Predicate.getAddressFromTx(txData);
+        lookupExit[exitId].status == ExitStatus.InFlightExecuted; // this ensures only 1 in-flight tx can be replayed on-chain
+        setIsExecuting(exitId, true);
+        if (to == predicateRegistry.maticShareToken()) {
+            require(signer == msg.sender, "executeInFlightTransaction: signer != msg.sender");
+            lookupExit[exitId].lastGoodNonce = int256(nonce) - 1;
+            shareTokenPredicate.executeInFlightTransaction(txData, signer, lookupExit[exitId].exitShareToken);
+        } else if (to == predicateRegistry.maticCash()) {
+            require(signer == msg.sender, "executeInFlightTransaction: signer != msg.sender");
+            lookupExit[exitId].lastGoodNonce = int256(nonce) - 1;
+            executeCashInFlight(txData, exitId);
+        } else if (to == predicateRegistry.zeroXTrade()) {
+            this.executeTrade.value(msg.value)(txData, exitId, signer);
+        }
+        setIsExecuting(exitId, false);
+    }
+
+    function executeTrade(bytes memory txData, uint256 exitId, address signer) public payable {
+        RLPReader.RLPItem[] memory txList = txData.toRlpItem().toList();
         TradeData memory trade;
-        (trade.taker, lookupExit[exitId].inFlightTxHash) = erc20Predicate.getAddressFromTx(txData); // signer of the tx is the taker; akin to taker being msg.sender
+        trade.taker = signer; // signer of the tx is the taker; akin to taker being msg.sender in the main contract
         if (trade.taker == msg.sender) {
             lookupExit[exitId].lastGoodNonce = int256(txList[0].toUint()) - 1;
         }
-        require(
-            // txList[3] denotes the "to" field in the transaction
-            RLPReader.toAddress(txList[3]) == predicateRegistry.zeroXTrade(),
-            "challengeTx.to != zeroXTrade"
-        );
         txData = RLPReader.toBytes(txList[5]);
         require(
             BytesLib.toBytes4(BytesLib.slice(txData, 0, 4)) == 0x089042f7,
@@ -275,6 +281,27 @@ contract AugurPredicate is Initializable {
             trade.taker,
             abi.encode(lookupExit[exitId].exitShareToken, lookupExit[exitId].exitCash)
         );
+        setIsExecuting(exitId, false);
+    }
+
+    function executeCashInFlight(bytes memory txData, uint256 exitId) public {
+        RLPReader.RLPItem[] memory txList = txData.toRlpItem().toList();
+        TradeData memory trade;
+        lookupExit[exitId].lastGoodNonce = int256(txList[0].toUint()) - 1;
+        txData = RLPReader.toBytes(txList[5]);
+        bytes4 funcSig = BytesLib.toBytes4(BytesLib.slice(txData, 0, 4));
+        setIsExecuting(exitId, true);
+        if (funcSig == TRANSFER_FUNC_SIG) {
+            lookupExit[exitId].exitCash.transferFrom(
+                msg.sender, // from
+                BytesLib.toAddress(txData, 4), // to
+                BytesLib.toUint(txData, 36) // amount
+            );
+        } else if (funcSig == BURN_FUNC_SIG) {
+            // do nothing
+        } else {
+            revert("Inflight tx type not supported");
+        }
         setIsExecuting(exitId, false);
     }
 
