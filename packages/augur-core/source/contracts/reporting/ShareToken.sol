@@ -46,13 +46,13 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
         fillOrder = _fillOrder;
         cancelOrder = _cancelOrder;
         profitLoss = IProfitLoss(_augur.lookup("ProfitLoss"));
-        // cash = ICash(_augur.lookup("Cash"));
     }
 
-    function initializeFromPredicate(IAugur _augur, address _cash) external onlyPredicate {
+    function initializeFromPredicate(IAugur _augur, address _cash) external /* onlyPredicate */ {
         // call to initialize() will ensure beforeInitialized validation
         initialize(_augur);
         cash = ICash(_cash);
+        _augurPredicate = msg.sender;
     }
 
     /**
@@ -64,7 +64,7 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
         @param _id ID of the token type
         @param _value Transfer amount
     */
-    function unsafeTransferFrom(address _from, address _to, uint256 _id, uint256 _value) public {
+    function unsafeTransferFrom(address _from, address _to, uint256 _id, uint256 _value) public isExecuting {
         _transferFrom(_from, _to, _id, _value, bytes(""), false);
     }
 
@@ -78,11 +78,11 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
         @param _ids IDs of each token type
         @param _values Transfer amounts per token type
     */
-    function unsafeBatchTransferFrom(address _from, address _to, uint256[] memory _ids, uint256[] memory _values) public {
+    function unsafeBatchTransferFrom(address _from, address _to, uint256[] memory _ids, uint256[] memory _values) public isExecuting {
         _batchTransferFrom(_from, _to, _ids, _values, bytes(""), false);
     }
 
-    function initializeMarket(IMarket _market, uint256 _numOutcomes, uint256 _numTicks) public /* @todo onlyPredicate */ {
+    function initializeMarket(IMarket _market, uint256 _numOutcomes, uint256 _numTicks) public onlyPredicate {
         // require (augur.isKnownUniverse(IUniverse(msg.sender)));
         markets[address(_market)].numOutcomes = _numOutcomes;
         markets[address(_market)].numTicks = _numTicks;
@@ -94,7 +94,7 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
      * @param _amount The number of complete sets to purchase
      * @return Bool True
      */
-    function publicBuyCompleteSets(IMarket _market, uint256 _amount) external returns (bool) {
+    function publicBuyCompleteSets(IMarket _market, uint256 _amount) external isExecuting returns (bool) {
         buyCompleteSetsInternal(_market, msg.sender, _amount);
         augur.logCompleteSetsPurchased(_market.getUniverse(), _market, msg.sender, _amount);
     }
@@ -106,7 +106,7 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
      * @param _amount The number of complete sets to purchase
      * @return Bool True
      */
-    function buyCompleteSets(IMarket _market, address _account, uint256 _amount) external returns (bool) {
+    function buyCompleteSets(IMarket _market, address _account, uint256 _amount) external isExecuting returns (bool) {
         buyCompleteSetsInternal(_market, _account, _amount);
     }
 
@@ -150,7 +150,7 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
      * @param _shortRecipient The account which should recieve shares of every outcome other than _longOutcome
      * @return Bool True
      */
-    function buyCompleteSetsForTrade(IMarket _market, uint256 _amount, uint256 _longOutcome, address _longRecipient, address _shortRecipient) external returns (bool) {
+    function buyCompleteSetsForTrade(IMarket _market, uint256 _amount, uint256 _longOutcome, address _longRecipient, address _shortRecipient) external isExecuting returns (bool) {
         uint256 _numOutcomes = markets[address(_market)].numOutcomes;
         uint256 _numTicks = markets[address(_market)].numTicks;
 
@@ -198,7 +198,7 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
      * @param _amount The number of complete sets to sell
      * @return (uint256 _creatorFee, uint256 _reportingFee) The fees taken for the market creator and reporting respectively
      */
-    function publicSellCompleteSets(IMarket _market, uint256 _amount) external returns (uint256 _creatorFee, uint256 _reportingFee) {
+    function publicSellCompleteSets(IMarket _market, uint256 _amount) external isExecuting returns (uint256 _creatorFee, uint256 _reportingFee) {
         (uint256 _payout, uint256 _creatorFee, uint256 _reportingFee) = burnCompleteSets(_market, msg.sender, _amount, address(0));
 
         require(cash.transfer(msg.sender, _payout));
@@ -219,7 +219,7 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
      * @param _affiliateAddress The affiliate address for the trade if one exists
      * @return (uint256 _creatorFee, uint256 _reportingFee) The fees taken for the market creator and reporting respectively
      */
-    function sellCompleteSets(IMarket _market, address _holder, address _recipient, uint256 _amount, address _affiliateAddress) external returns (uint256 _creatorFee, uint256 _reportingFee) {
+    function sellCompleteSets(IMarket _market, address _holder, address _recipient, uint256 _amount, address _affiliateAddress) external isExecuting returns (uint256 _creatorFee, uint256 _reportingFee) {
         require(_holder == msg.sender || isApprovedForAll(_holder, msg.sender) == true, "ERC1155: need operator approval to sell complete sets");
         (uint256 _payout, uint256 _creatorFee, uint256 _reportingFee) = burnCompleteSets(_market, _holder, _amount, _affiliateAddress);
 
@@ -318,13 +318,13 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
      * @param _affiliateAddress An affiliate address to share market creator fees with
      * @return Bool True
      */
-    function claimTradingProceeds(IMarket _market, address _shareHolder, address _affiliateAddress) external nonReentrant returns (uint256[] memory _outcomeFees) {
+    function claimTradingProceeds(IMarket _market, address _shareHolder, address _affiliateAddress) external isExecuting nonReentrant returns (uint256[] memory _outcomeFees) {
         return claimTradingProceedsInternal(_market, _shareHolder, _affiliateAddress);
     }
 
-    function claimTradingProceedsToOICash(IMarket _market, address _affiliateAddress) external nonReentrant returns (uint256[] memory _outcomeFees) {}
+    function claimTradingProceedsToOICash(IMarket _market, address _affiliateAddress) external isExecuting nonReentrant returns (uint256[] memory _outcomeFees) {}
 
-    function claimTradingProceedsInternal(IMarket _market, address _shareHolder, address _affiliateAddress) internal returns (uint256[] memory _outcomeFees) {
+    function claimTradingProceedsInternal(IMarket _market, address _shareHolder, address _affiliateAddress) internal isExecuting returns (uint256[] memory _outcomeFees) {
         require(augur.isKnownMarket(_market));
         if (!_market.isFinalized()) {
             _market.finalize();
@@ -373,7 +373,7 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
         augur.logTradingProceedsClaimed(_market.getUniverse(), _sender, address(_market), _outcome, _numShares, _numPayoutTokens, _fees);
     }
 
-    function divideUpWinnings(IMarket _market, uint256 _outcome, uint256 _numberOfShares) public returns (uint256 _proceeds, uint256 _shareHolderShare, uint256 _creatorShare, uint256 _reporterShare) {
+    function divideUpWinnings(IMarket _market, uint256 _outcome, uint256 _numberOfShares) public isExecuting returns (uint256 _proceeds, uint256 _shareHolderShare, uint256 _creatorShare, uint256 _reporterShare) {
         _proceeds = calculateProceeds(_market, _outcome, _numberOfShares);
         _creatorShare = calculateCreatorFee(_market, _proceeds);
         _reporterShare = calculateReportingFee(_market, _proceeds);
@@ -386,7 +386,7 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
         return _numberOfShares.mul(_payoutNumerator);
     }
 
-    function calculateReportingFee(IMarket _market, uint256 _amount) public returns (uint256) {
+    function calculateReportingFee(IMarket _market, uint256 _amount) public isExecuting returns (uint256) {
         uint256 _reportingFeeDivisor = _market.getUniverse().getOrCacheReportingFeeDivisor();
         return _amount.div(_reportingFeeDivisor);
     }

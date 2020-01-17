@@ -47,6 +47,12 @@ contract Cash is ITyped, ICash, ICashFaucet, ExecutorAcl {
         return true;
     }
 
+    function initializeFromPredicate(IAugur _augur) public beforeInitialized {
+        endInitialization();
+        initialize(_augur);
+        _augurPredicate = msg.sender;
+    }
+
     function transfer(address _to, uint256 _amount) public isExecuting returns (bool) {
         require(_to != address(0), "Cannot send to 0x0");
         // only predicate contracts can invoke transfer. Assume they have enough cash to fulfill these transfers.
@@ -86,17 +92,19 @@ contract Cash is ITyped, ICash, ICashFaucet, ExecutorAcl {
         return balances[_owner];
     }
 
-    function approve(address _spender, uint256 _amount) public returns (bool) {
+    // Having isExecuting acl here, causes an issue in deployment because FillOrder.initialize() calls Cash.approve()
+    // Besides, I don't see an attack vector by not having this ACL here.
+    function approve(address _spender, uint256 _amount) public /* isExecuting */ returns (bool) {
         approveInternal(msg.sender, _spender, _amount);
         return true;
     }
 
-    function increaseApproval(address _spender, uint _addedValue) public returns (bool) {
+    function increaseApproval(address _spender, uint _addedValue) public isExecuting returns (bool) {
         approveInternal(msg.sender, _spender, allowed[msg.sender][_spender].add(_addedValue));
         return true;
     }
 
-    function decreaseApproval(address _spender, uint _subtractedValue) public returns (bool) {
+    function decreaseApproval(address _spender, uint _subtractedValue) public isExecuting returns (bool) {
         uint oldValue = allowed[msg.sender][_spender];
         if (_subtractedValue > oldValue) {
             approveInternal(msg.sender, _spender, 0);
@@ -127,11 +135,11 @@ contract Cash is ITyped, ICash, ICashFaucet, ExecutorAcl {
         require((z = x - y) <= x, "math-sub-underflow");
     }
 
-    function joinMint(address usr, uint wad) public isExecuting /* auth */ returns (bool) {
+    function joinMint(address usr, uint wad) public isExecuting returns (bool) {
         return mint(usr, wad);
     }
 
-    function joinBurn(address usr, uint wad) public returns (bool) {
+    function joinBurn(address usr, uint wad) public isExecuting returns (bool) {
         if (usr != msg.sender && allowed[usr][msg.sender] != uint(-1)) {
             allowed[usr][msg.sender] = sub(allowed[usr][msg.sender], wad);
         }
