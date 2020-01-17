@@ -73,7 +73,7 @@ Deploying to: ${networkConfiguration.networkName}
         this.augur = await this.uploadAugur();
         this.augurTrading = await this.uploadAugurTrading();
         await this.uploadAllContracts();
-        await this.uploadAugurPredicate();
+        await this.uploadPredicates();
 
         const externalAddresses = this.configuration.externalAddresses;
 
@@ -263,12 +263,17 @@ Deploying to: ${networkConfiguration.networkName}
         return augurTrading;
     }
 
-    private async uploadAugurPredicate() {
-      console.log('Uploading augur Predicate...');
-      const contract = await this.contracts.get("AugurPredicateTest");
-      const address = await this.construct(contract, []);
+    private async uploadPredicates() {
+      console.log('Uploading Predicates...');
+      let contract = await this.contracts.get("AugurPredicateTest");
+      let address = await this.construct(contract, []);
       contract.address = address;
       console.log(`Augur Predicate address: ${address}`);
+
+      contract = await this.contracts.get("ShareTokenPredicate");
+      address = await this.construct(contract, []);
+      contract.address = address;
+      console.log(`ShareToken Predicate address: ${address}`);
     }
 
     private async uploadTestDaiContracts(): Promise<void> {
@@ -350,6 +355,7 @@ Deploying to: ${networkConfiguration.networkName}
         if (contractName === 'LegacyReputationToken') return;
         if (contractName === 'AugurPredicate') return;
         if (contractName === 'AugurPredicateTest') return;
+        if (contractName === 'ShareTokenPredicate') return;
         if (contractName === 'Cash') return;
         if (contractName === 'RepPriceOracle') return;
         if (contractName === 'CashFaucet') return;
@@ -386,9 +392,9 @@ Deploying to: ${networkConfiguration.networkName}
         console.log('Initializing contracts...');
         const promises: Array<Promise<any>> = [];
 
-        const shareTokenContract = await this.getContractAddress("ShareToken");
-        const shareToken = new ShareToken(this.dependencies, shareTokenContract);
-        promises.push(shareToken.initialize(this.augur!.address));
+        // const shareTokenContract = await this.getContractAddress("ShareToken");
+        // const shareToken = new ShareToken(this.dependencies, shareTokenContract);
+        // promises.push(shareToken.initialize(this.augur!.address));
 
         const createOrderContract = await this.getContractAddress('CreateOrder');
         const createOrder = new CreateOrder(this.dependencies, createOrderContract);

@@ -82,7 +82,7 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
         _batchTransferFrom(_from, _to, _ids, _values, bytes(""), false);
     }
 
-    function initializeMarket(IMarket _market, uint256 _numOutcomes, uint256 _numTicks) public isExecuting {
+    function initializeMarket(IMarket _market, uint256 _numOutcomes, uint256 _numTicks) public onlyPredicate {
         // require (augur.isKnownUniverse(IUniverse(msg.sender)));
         markets[address(_market)].numOutcomes = _numOutcomes;
         markets[address(_market)].numTicks = _numTicks;

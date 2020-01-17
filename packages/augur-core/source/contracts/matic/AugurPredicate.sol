@@ -133,6 +133,7 @@ contract AugurPredicate is Initializable {
         // cash.initialize(augur);
 
         _exitShareToken.initializeFromPredicate(augur, address(_exitCash));
+        _exitCash.initializeFromPredicate(augur);
 
         lookupExit[exitId] = ExitData({
             exitShareToken: _exitShareToken,

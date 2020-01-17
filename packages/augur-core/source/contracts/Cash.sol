@@ -47,10 +47,10 @@ contract Cash is ITyped, ICash, ICashFaucet, ExecutorAcl {
         return true;
     }
 
-    function initializeForMatic(IAugur _augur, address augurPredicate) public beforeInitialized {
+    function initializeFromPredicate(IAugur _augur) public beforeInitialized {
         endInitialization();
         initialize(_augur);
-        _augurPredicate = augurPredicate;
+        _augurPredicate = msg.sender;
     }
 
     function transfer(address _to, uint256 _amount) public isExecuting returns (bool) {
@@ -92,7 +92,9 @@ contract Cash is ITyped, ICash, ICashFaucet, ExecutorAcl {
         return balances[_owner];
     }
 
-    function approve(address _spender, uint256 _amount) public isExecuting returns (bool) {
+    // Having isExecuting acl here, causes an issue in deployment because FillOrder.initialize() calls Cash.approve()
+    // Besides, I don't see an attack vector by not having this ACL here.
+    function approve(address _spender, uint256 _amount) public /* isExecuting */ returns (bool) {
         approveInternal(msg.sender, _spender, _amount);
         return true;
     }
