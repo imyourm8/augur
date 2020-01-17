@@ -1,15 +1,18 @@
 pragma solidity 0.5.10;
 
-contract ExecutorAcl {
+import 'ROOT/libraries/Initializable.sol';
+
+contract ExecutorAcl is Initializable {
     bool _isExecuting;
     address _augurPredicate;
 
-    // constructor(address augurPredicate) public {
+    // function initialize(address augurPredicate) public {
+    //     endInitialization();
     //     _augurPredicate = augurPredicate;
     // }
 
     modifier onlyPredicate() {
-        /* todo onlyPredicate */
+        require(msg.sender == _augurPredicate, "ExecutorAcl.onlyPredicate is authorized");
         _;
     }
 
@@ -19,8 +22,7 @@ contract ExecutorAcl {
         _;
     }
 
-    function setIsExecuting(bool _executing) public onlyPredicate {
-        _isExecuting = _executing;
+    function setIsExecuting(bool executing) public onlyPredicate {
+        _isExecuting = executing;
     }
 }
-
