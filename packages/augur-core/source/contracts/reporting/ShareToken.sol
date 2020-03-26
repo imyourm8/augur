@@ -310,7 +310,7 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
     }
 
     function claimTradingProceedsToOICash(IMarket _market, bytes32 _fingerprint) external nonReentrant returns (uint256[] memory _outcomeFees) {
-        return claimTradingProceedsInternal(_market, msg.sender, _affiliateAddress, true);
+        return claimTradingProceedsInternal(_market, msg.sender, _fingerprint, true);
     }
 
     function claimTradingProceedsInternal(IMarket _market, address _shareHolder, bytes32 _fingerprint, bool toOICash) internal returns (uint256[] memory _outcomeFees) {
@@ -339,7 +339,7 @@ contract ShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGu
                         IOICash(_market.getUniverse().getOpenInterestCash()).depositForUser(_shareHolder, _proceeds);
                     } else {
                         _market.getUniverse().withdraw(address(this), _shareHolderShare.add(_reporterShare), address(_market));
-                        distributeProceeds(_market, _shareHolder, _shareHolderShare, _creatorShare, _reporterShare, _affiliateAddress);
+                        distributeProceeds(_market, _shareHolder, _shareHolderShare, _creatorShare, _reporterShare, _fingerprint);
                     }
                 }
                 _outcomeFees[_outcome] = _creatorShare.add(_reporterShare);

@@ -119,6 +119,18 @@ const networks: NetworksToOptions = {
         ? new ethers.utils.BigNumber(7500000)
         : new ethers.utils.BigNumber(process.env.ETHEREUM_GAS_LIMIT),
   },
+  // Matic Testnet V3
+  // matic: {
+  //   isProduction: process.env.PRODUCTION === "true" || false,
+  //   http: "https://testnetv3.matic.network",
+  //   ws: "ws://testnetv3.matic.network",
+  //   privateKey: process.env.ETHEREUM_PRIVATE_KEY || "fae42052f82bed612a724fec3632f325f377120592c75bb78adfcceae6470c5a",
+  //   gasPrice: ((typeof process.env.ETHEREUM_GAS_PRICE_IN_NANOETH === "undefined") ? new ethers.utils.BigNumber(0) : new ethers.utils.BigNumber(process.env.ETHEREUM_GAS_PRICE_IN_NANOETH!)).mul(new ethers.utils.BigNumber(1000000000)),
+  //   gasLimit:
+  //     typeof process.env.ETHEREUM_GAS_LIMIT === 'undefined'
+  //       ? new ethers.utils.BigNumber(7500000)
+  //       : new ethers.utils.BigNumber(process.env.ETHEREUM_GAS_LIMIT),
+  // },
   mainnet: {
     isProduction: true,
     http:
