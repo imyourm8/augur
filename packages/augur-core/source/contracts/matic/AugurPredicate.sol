@@ -298,9 +298,8 @@ contract AugurPredicate is Initializable {
                 BytesLib.toAddress(txData, 4), // to
                 BytesLib.toUint(txData, 36) // amount
             );
-        } else if (funcSig == BURN_FUNC_SIG) {
-            // do nothing
-        } else {
+        } else if (funcSig != BURN_FUNC_SIG) {
+            // if burning happened no need to do anything
             revert("Inflight tx type not supported");
         }
         setIsExecuting(exitId, false);
@@ -434,17 +433,22 @@ contract AugurPredicate is Initializable {
         RLPReader.RLPItem[] memory _challengeData = challengeData.toRlpItem().toList();
         bytes memory challengeTx = _challengeData[10].toBytes();
         RLPReader.RLPItem[] memory txList = challengeTx.toRlpItem().toList();
+
         require(txList.length == 9, "MALFORMED_WITHDRAW_TX");
+
         address to = RLPReader.toAddress(txList[3]);
         (address signer, bytes32 txHash) = erc20Predicate.getAddressFromTx(challengeTx);
+
         require(
             lookupExit[exitId].inFlightTxHash != txHash,
             "Cannot challenge with the exit tx itself"
         );
+
         if (signer == exitor) {
             if (int256(txList[0].toUint()) <= lookupExit[exitId].lastGoodNonce) {
                 return false;
             }
+            // TODO perform 1 call to registry and return some enum instead
             if (predicateRegistry.belongsToStateDeprecationContractSet(to)) {
                 return true;
             } else if (to == predicateRegistry.maticShareToken()) {
@@ -457,8 +461,15 @@ contract AugurPredicate is Initializable {
                 }
             }
         }
+
         uint256 orderIndex = _challengeData[9].toUint();
-        return isValidDeprecation(RLPReader.toBytes(txList[5]), to, orderIndex, exitor, exitId);
+        return isValidDeprecation(
+            RLPReader.toBytes(txList[5]), 
+            to, 
+            orderIndex, 
+            exitor,
+            exitId
+        );
     }
 
     function isValidDeprecation(bytes memory txData, address to, uint256 orderIndex, address exitor, uint256 exitId) internal view returns(bool) {
@@ -466,30 +477,37 @@ contract AugurPredicate is Initializable {
             to == predicateRegistry.zeroXTrade(),
             "challengeTx.to != zeroXTrade"
         );
+
         require(
             BytesLib.toBytes4(BytesLib.slice(txData, 0, 4)) == 0x089042f7,
             "funcSig of challengeTx should match that of zeroxTrade.trade"
         );
+
         (,,, IExchange.Order[] memory _orders, bytes[] memory _signatures) = abi.decode(
             BytesLib.slice(txData, 4, txData.length - 4),
             (uint256, address, bytes32, IExchange.Order[], bytes[])
         );
+
         IExchange.Order memory order = _orders[orderIndex];
         require(
             order.makerAddress == exitor,
             "Order not signed by the exitor"
         );
+
         require(
             lookupExit[exitId].startExitTime <= order.expirationTimeSeconds,
             "Order should not have expired"
         );
+
         IExchange _maticExchange = zeroXTrade.getExchangeFromAssetData(order.makerAssetData);
         ZeroXExchange exchange = ZeroXExchange(predicateRegistry.zeroXExchange(address(_maticExchange)));
         IExchange.OrderInfo memory orderInfo = exchange.getOrderInfo(order);
+
         require(
             exchange.isValidSignature(orderInfo.orderHash, order.makerAddress, _signatures[orderIndex]),
             "INVALID_ORDER_SIGNATURE"
         );
+
         return true;
     }
 }
