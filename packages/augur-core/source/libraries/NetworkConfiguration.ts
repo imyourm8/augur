@@ -84,15 +84,15 @@ const networks: NetworksToOptions = {
     },
     environment: {
         isProduction: process.env.PRODUCTION === "true" || false,
-        http: "http://localhost:8545",
-        ws: "ws://localhost:8546",
+        http: "http://localhost:9545",
+        ws: "ws://localhost:9546",
         privateKey: process.env.ETHEREUM_PRIVATE_KEY || "fae42052f82bed612a724fec3632f325f377120592c75bb78adfcceae6470c5a",
         gasPrice: ((typeof process.env.ETHEREUM_GAS_PRICE_IN_NANOETH === "undefined") ? new ethers.utils.BigNumber(20) : new ethers.utils.BigNumber(process.env.ETHEREUM_GAS_PRICE_IN_NANOETH!)).mul(new ethers.utils.BigNumber(1000000000))
     },
     matic: {
         isProduction: process.env.PRODUCTION === "true" || false,
-        http: "http://localhost:8547",
-        ws: "ws://localhost:8548",
+        http: "http://localhost:8545",
+        ws: "ws://localhost:8546",
         privateKey: process.env.ETHEREUM_PRIVATE_KEY || "fae42052f82bed612a724fec3632f325f377120592c75bb78adfcceae6470c5a",
         gasPrice: ((typeof process.env.ETHEREUM_GAS_PRICE_IN_NANOETH === "undefined") ? new ethers.utils.BigNumber(20) : new ethers.utils.BigNumber(process.env.ETHEREUM_GAS_PRICE_IN_NANOETH!)).mul(new ethers.utils.BigNumber(1000000000))
     },
