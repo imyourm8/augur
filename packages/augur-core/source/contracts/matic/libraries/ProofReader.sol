@@ -7,7 +7,7 @@ library ProofReader {
   using RLPReader for bytes;
   using RLPReader for RLPReader.RLPItem;
 
-  function convertToProof(bytes memory data) internal pure returns(RLPReader.RLPItem[] memory) {
+  function convertToExitPayload(bytes memory data) internal pure returns(RLPReader.RLPItem[] memory) {
     return data.toRlpItem().toList();
   }
 
@@ -27,12 +27,13 @@ library ProofReader {
     3: Logs - array of [address, [topics], data]
    */
   function getReceipt(RLPReader.RLPItem[] memory payload) internal pure returns(RLPReader.RLPItem[] memory) {
-    return payload[6].toList();
+    return payload[6].toBytes().toRlpItem().toList();
   }
 
-  function getLogFromTx(RLPReader.RLPItem[] memory payload) internal pure returns(RLPReader.RLPItem[] memory) {
+  function getLog(RLPReader.RLPItem[] memory payload) internal pure returns(RLPReader.RLPItem[] memory) {
     uint256 logIndex = getLogIndex(payload);
-    return getReceipt(payload)[3].toList()[logIndex].toList();
+    RLPReader.RLPItem[] memory receipt = getReceipt(payload);
+    return receipt[3].toList()[logIndex].toList();
   }
 
   function getLogEmitterAddress(RLPReader.RLPItem[] memory log) internal pure returns(address) {

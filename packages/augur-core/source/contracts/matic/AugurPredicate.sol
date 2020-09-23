@@ -50,9 +50,13 @@ contract AugurPredicate is Initializable {
 
     // keccak256('transfer(address,uint256)').slice(0, 4)
     bytes4 constant TRANSFER_FUNC_SIG = 0xa9059cbb;
-    // keccak256('joinBurn(address,uint256)').slice(0, 4)
-    bytes4 constant BURN_FUNC_SIG = 0xa9059cbb; // @todo write the correct sig
     bytes4 constant ZEROX_TRADE_FUNC_SIG = 0x089042f7;
+
+    // keccak256('joinBurn(address,uint256)').slice(0, 4)
+    bytes4 constant BURN_FUNC_SIG = 0xf11f299e; 
+
+    // keccak256('Burn(address,uint256)').slice(0, 4)
+    bytes32 constant BURN_EVENT_SIG = 0xcc16f5dbb4873280815c1ee09dbd06736cffcc184412cf7a71a0fdb75d397ca5;
 
     // keccak256('Withdraw(address,address,uint256,uint256,uint256)')
     bytes32 constant WITHDRAW_EVENT_SIG = 0xebff2602b3f468259e1e99f613fed6691f3a6526effe6ef3e768ba7ae7a36c4f;
@@ -248,7 +252,7 @@ contract AugurPredicate is Initializable {
         lookupExit[exitId].exitPriority = lookupExit[exitId].exitPriority.max(age);
 
         lookupExit[exitId].lastGoodNonce = int256(ProofReader.getTxNonce(
-            ProofReader.convertToProof(lastCheckpointedTx)
+            ProofReader.convertToExitPayload(lastCheckpointedTx)
         ));
     }
 
@@ -260,10 +264,10 @@ contract AugurPredicate is Initializable {
         );
         lookupExit[exitId].status = ExitStatus.InFlightExecuted; // this ensures only 1 in-flight tx can be replayed on-chain
 
-        RLPReader.RLPItem[] memory txList = ProofReader.convertToTx(data);
-        require(txList.length == 9, "incorrect transaction data");
+        RLPReader.RLPItem[] memory targetTx = ProofReader.convertToTx(data);
+        require(targetTx.length == 9, "incorrect transaction data");
 
-        address to = ProofReader.getTxTo(txList);
+        address to = ProofReader.getTxTo(targetTx);
         address signer;
         (signer, lookupExit[exitId].inFlightTxHash) = erc20Predicate.getAddressFromTx(data);
 
@@ -271,12 +275,12 @@ contract AugurPredicate is Initializable {
 
         if (to == predicateRegistry.maticShareToken()) {
             require(signer == msg.sender, "executeInFlightTransaction: signer != msg.sender");
-            lookupExit[exitId].lastGoodNonce = int256(ProofReader.getTxNonce(txList)) - 1;
+            lookupExit[exitId].lastGoodNonce = int256(ProofReader.getTxNonce(targetTx)) - 1;
             shareTokenPredicate.executeInFlightTransaction(data, signer, lookupExit[exitId].exitShareToken);
         } 
         else if (to == predicateRegistry.maticCash()) {
             require(signer == msg.sender, "executeInFlightTransaction: signer != msg.sender");
-            lookupExit[exitId].lastGoodNonce = int256(ProofReader.getTxNonce(txList)) - 1;
+            lookupExit[exitId].lastGoodNonce = int256(ProofReader.getTxNonce(targetTx)) - 1;
             executeCashInFlight(data, exitId);
         } 
         else if (to == predicateRegistry.zeroXTrade()) {
@@ -329,7 +333,7 @@ contract AugurPredicate is Initializable {
 
     function executeCashInFlight(bytes memory txData, uint256 exitId) public {
         RLPReader.RLPItem[] memory txList = txData.toRlpItem().toList();
-        TradeData memory trade;
+
         lookupExit[exitId].lastGoodNonce = int256(txList[0].toUint()) - 1;
         txData = RLPReader.toBytes(txList[5]);
         bytes4 funcSig = BytesLib.toBytes4(BytesLib.slice(txData, 0, 4));
@@ -348,36 +352,39 @@ contract AugurPredicate is Initializable {
     }
 
     function startExitWithBurntTokens(bytes calldata data) external {
-        RLPReader.RLPItem[] memory referenceTxData = data.toRlpItem().toList();
-        RLPReader.RLPItem[] memory log = ProofReader.getLogFromTx(referenceTxData);
-        require(ProofReader.getLogEmitterAddress(log) == predicateRegistry.maticCash(), "must burn cash");
+        // RLPReader.RLPItem[] memory exitPayload = ProofReader.convertToExitPayload(data);
+        // RLPReader.RLPItem[] memory log = ProofReader.getLog(exitPayload);
+        // require(ProofReader.getLogEmitterAddress(log) == predicateRegistry.maticCash(), "not cash");
         
-        RLPReader.RLPItem[] memory topics = ProofReader.getLogTopics(log);
-        require(
-            bytes32(topics[0].toUint()) == WITHDRAW_EVENT_SIG,
-            "not WITHDRAW_EVENT_SIG"
-        );
+        // RLPReader.RLPItem[] memory topics = ProofReader.getLogTopics(log);
+        // require(
+        //     bytes32(topics[0].toUint()) == BURN_EVENT_SIG,
+        //     "not BURN_EVENT_SIG"
+        // );
 
         // event Withdraw(address indexed token, address indexed from, uint256 amount, uint256 input1, uint256 output1)
-        require(
-            msg.sender == address(topics[2].toUint()), // from
-            "not a burn owner"
-        );
+        // require(
+        //     msg.sender == address(topics[2].toUint()), // from
+        //     "not a burn owner"
+        // );
 
         bytes memory _preState = erc20Predicate.interpretStateUpdate(
             abi.encode(data, msg.sender, true /* verifyInclusionInCheckpoint */, false /* isChallenge */)
         );
+        // Originally, in Withdraw even address of the token is an address of the corresponding
+        // root token. In case of Augur it is an address of the token itself. 
+        // Predicate knows root Cash contract
         (
             uint256 exitAmount, 
-            uint256 age, 
-            address maticCash, 
-            address rootCash
+            uint256 age,
+            , 
+            address maticCash 
         ) = abi.decode(_preState, (uint256, uint256, address, address));
         
         withdrawManager.addExitToQueue(
             msg.sender,
             maticCash,
-            rootCash, 
+            address(augurCash), 
             exitAmount,
             bytes32(0x0),
             true, /* isRegularExit */
@@ -412,26 +419,39 @@ contract AugurPredicate is Initializable {
             "ONLY_WITHDRAW_MANAGER"
         );
         // this encoded data is compatible with rest of the matic predicates
-        (,,address exitor,uint256 exitId) = abi.decode(data, (uint256, address, address, uint256));
+        (uint256 regularExitId,,address exitor,uint256 exitIdOrAmount, bool isRegularExit) = abi.decode(data, (uint256, address, address, uint256, bool));
+
+        uint256 exitId;
         uint256 payout;
-        for (uint256 i = 0; i < lookupExit[exitId].marketsList.length; i++) {
-            IMarket market = IMarket(lookupExit[exitId].marketsList[i]);
-            if (market.isFinalized()) {
-                payout = payout.add(processExitForFinalizedMarket(market, exitor, exitId));
-            } else {
-                processExitForMarket(market, exitor, exitId); 
+
+        if (isRegularExit) {
+            exitId = regularExitId;
+            payout = exitIdOrAmount;
+        } else {
+            // exit id for MoreVP exits is token amount
+            exitId = exitIdOrAmount;
+
+            for (uint256 i = 0; i < lookupExit[exitId].marketsList.length; i++) {
+                IMarket market = IMarket(lookupExit[exitId].marketsList[i]);
+                if (market.isFinalized()) {
+                    payout = payout.add(processExitForFinalizedMarket(market, exitor, exitId));
+                } else {
+                    processExitForMarket(market, exitor, exitId); 
+                }
             }
+            payout = payout.add(lookupExit[exitId].exitCash.balanceOf(exitor));    
+            lookupExit[exitId].status = ExitStatus.Finalized;
         }
-        payout = payout.add(lookupExit[exitId].exitCash.balanceOf(exitor));
-        (bool _success, uint256 _feesOwed) = oICash.withdraw(payout);
-        require(_success, "OICash.Withdraw failed");
-        lookupExit[exitId].status = ExitStatus.Finalized;
-        if (payout > _feesOwed) {
+
+        (bool oiCashWithdrawSuccess, uint256 feesOwed) = oICash.withdraw(payout);
+        require(oiCashWithdrawSuccess, "transfer failed");
+        if (payout > feesOwed) {
             require(
-                augurCash.transfer(exitor, payout - _feesOwed),
-                "Cash transfer failed"
+                augurCash.transfer(exitor, payout - feesOwed),
+                "cash transfer failed"
             );
         }
+        
         emit ExitFinalized(exitId, exitor);
     }
 
@@ -522,7 +542,7 @@ contract AugurPredicate is Initializable {
             "Cannot challenge with the exit tx itself"
         );
 
-        bytes memory txData;
+        bytes memory txData = ProofReader.getTxData(challengeTx);
         address to = ProofReader.getTxTo(challengeTx);
 
         if (signer == exitor) {
@@ -534,9 +554,9 @@ contract AugurPredicate is Initializable {
             if (predicateRegistry.belongsToStateDeprecationContractSet(to)) {
                 return true;
             } else if (to == predicateRegistry.maticShareToken()) {
-                return shareTokenPredicate.isValidDeprecation(ProofReader.getTxData(challengeTx));
+                return shareTokenPredicate.isValidDeprecation(txData);
             } else if (to == predicateRegistry.maticCash()) {
-                bytes4 funcSig = ProofReader.getFunctionSignature(ProofReader.getTxData(challengeTx));
+                bytes4 funcSig = ProofReader.getFunctionSignature(txData);
                 if (funcSig == TRANSFER_FUNC_SIG || funcSig == BURN_FUNC_SIG) {
                     return true;
                 }
@@ -544,7 +564,7 @@ contract AugurPredicate is Initializable {
         }
 
         return isValidDeprecation(
-            ProofReader.getTxData(challengeTx), 
+            txData, 
             to, 
             ProofReader.getLogIndex(_challengeData), // log index is order index 
             exitor,
