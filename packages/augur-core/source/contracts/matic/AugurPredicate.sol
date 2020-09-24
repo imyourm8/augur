@@ -352,22 +352,6 @@ contract AugurPredicate is Initializable {
     }
 
     function startExitWithBurntTokens(bytes calldata data) external {
-        // RLPReader.RLPItem[] memory exitPayload = ProofReader.convertToExitPayload(data);
-        // RLPReader.RLPItem[] memory log = ProofReader.getLog(exitPayload);
-        // require(ProofReader.getLogEmitterAddress(log) == predicateRegistry.maticCash(), "not cash");
-        
-        // RLPReader.RLPItem[] memory topics = ProofReader.getLogTopics(log);
-        // require(
-        //     bytes32(topics[0].toUint()) == BURN_EVENT_SIG,
-        //     "not BURN_EVENT_SIG"
-        // );
-
-        // event Withdraw(address indexed token, address indexed from, uint256 amount, uint256 input1, uint256 output1)
-        // require(
-        //     msg.sender == address(topics[2].toUint()), // from
-        //     "not a burn owner"
-        // );
-
         bytes memory _preState = erc20Predicate.interpretStateUpdate(
             abi.encode(data, msg.sender, true /* verifyInclusionInCheckpoint */, false /* isChallenge */)
         );
@@ -380,6 +364,9 @@ contract AugurPredicate is Initializable {
             , 
             address maticCash 
         ) = abi.decode(_preState, (uint256, uint256, address, address));
+
+        RLPReader.RLPItem[] memory log = ProofReader.getLog(ProofReader.convertToExitPayload(data));
+        exitAmount = BytesLib.toUint(log[2].toBytes(), 0); // from log data
         
         withdrawManager.addExitToQueue(
             msg.sender,
