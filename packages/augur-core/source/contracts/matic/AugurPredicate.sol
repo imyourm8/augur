@@ -514,7 +514,7 @@ contract AugurPredicate is Initializable {
         (address exitor,,uint256 exitId,,) = abi.decode(exit, (address, address, uint256, bytes32, bool));
         require(
             lookupExit[exitId].exitPriority < age,
-            "provide more recent transaction"
+            "provide more recent tx"
         );
 
         RLPReader.RLPItem[] memory _challengeData = challengeData.toRlpItem().toList();
@@ -526,7 +526,7 @@ contract AugurPredicate is Initializable {
 
         require(
             lookupExit[exitId].inFlightTxHash != txHash,
-            "Cannot challenge with the exit tx itself"
+            "can't challenge with the exit tx itself"
         );
 
         bytes memory txData = ProofReader.getTxData(challengeTx);

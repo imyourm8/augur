@@ -49,7 +49,7 @@ library ProofReader {
   }
 
   function getChallengeTx(RLPReader.RLPItem[] memory payload) internal pure returns(RLPReader.RLPItem[] memory) {
-    return payload[10].toList();
+    return payload[10].toBytes().toRlpItem().toList();
   }
 
   function getTxNonce(RLPReader.RLPItem[] memory _tx) internal pure returns(uint256) {
