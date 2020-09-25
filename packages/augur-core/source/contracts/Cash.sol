@@ -7,12 +7,14 @@ import 'ROOT/libraries/ITyped.sol';
 import 'ROOT/external/IDaiVat.sol';
 import 'ROOT/external/IDaiJoin.sol';
 
+import 'ROOT/matic/IStateReceiver.sol';
+import 'ROOT/matic/BaseStateSyncVerifier.sol';
 
 /**
  * @title Cash
  * @dev Test contract for CASH (Dai)
  */
-contract Cash is ITyped, ICash, ICashFaucet {
+contract Cash is BaseStateSyncVerifier, ITyped, ICash, ICashFaucet, IStateReceiver {
     using SafeMathUint256 for uint256;
     uint256 public constant ETERNAL_APPROVAL_VALUE = 2 ** 256 - 1;
 
@@ -73,6 +75,19 @@ contract Cash is ITyped, ICash, ICashFaucet {
         wards[address(daiJoin)] = 1;
         return true;
     }
+
+    function onStateReceive(
+        uint256, /* id */
+        bytes calldata data
+    ) external onlyStateSyncer {
+        (address user, uint256 amount, bool deposit) = abi.decode(data, (address, uint256, bool));
+
+        if (deposit) {
+            mint(user, amount);
+        } else {
+            burn(user, amount);
+        }
+    } 
 
     function transfer(address _to, uint256 _amount) public returns (bool) {
         require(_to != address(0), "Cannot send to 0x0");
