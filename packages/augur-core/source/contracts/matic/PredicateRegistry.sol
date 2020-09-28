@@ -15,6 +15,13 @@ contract PredicateRegistry is Ownable {
         Cash
     }
 
+    enum DeprecationType {
+        Unknown,
+        Default,
+        ShareToken,
+        Cash
+    }
+
     mapping(address => Market) public childToRootMarket;
     mapping(address => address) public zeroXExchange;
 
@@ -60,8 +67,16 @@ contract PredicateRegistry is Ownable {
         shareToken = _shareToken;
     }
 
-    function belongsToStateDeprecationContractSet(address _address) public view returns(bool) {
-        return _address == zeroXTrade || _address == defaultExchange;
+    function getDeprecationType(address addr) public view returns(DeprecationType) {
+        if (addr == zeroXTrade || addr == defaultExchange) {
+            return DeprecationType.Default;
+        } else if (addr == cash) {
+            return DeprecationType.Cash;
+        } else if (addr == shareToken) {
+            return DeprecationType.ShareToken;
+        }
+
+        return DeprecationType.Unknown;
     }
 
     function getContractType(address addr) public view returns(ContractType) {
