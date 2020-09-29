@@ -40,7 +40,7 @@ contract AugurSyncer is Ownable {
         address _designatedReporterAddress,
         string memory _extraInfo
     ) public returns (IMarket) {
-        IMarket market = _universe.createYesNoMarket(
+        IMarket _market = _universe.createYesNoMarket(
             _endTime,
             _feePerCashInAttoCash,
             _affiliateFeeDivisor,
@@ -48,18 +48,19 @@ contract AugurSyncer is Ownable {
             _extraInfo
         );
 
-        _syncWithCommand(
+        syncWithCommand(
             SYNC_MARKET_INFO_CMD,
-            _encodeMarketArguments(
+            encodeMarketArguments(
                 _universe,
+                _market,
                 _endTime,
-                1, // TODO
+                _feePerCashInAttoCash,
                 DEFAULT_NUM_TICKS,
                 DEFAULT_NUM_OUTCOMES
             )
         );
 
-        return market;
+        return _market;
     }
 
     function createCategoricalMarket(
@@ -71,7 +72,7 @@ contract AugurSyncer is Ownable {
         bytes32[] memory _outcomes,
         string memory _extraInfo
     ) public returns (IMarket) {
-        IMarket market = _universe.createCategoricalMarket(
+        IMarket _market = _universe.createCategoricalMarket(
             _endTime,
             _feePerCashInAttoCash,
             _affiliateFeeDivisor,
@@ -80,18 +81,19 @@ contract AugurSyncer is Ownable {
             _extraInfo
         );
 
-        _syncWithCommand(
+        syncWithCommand(
             SYNC_MARKET_INFO_CMD,
-            _encodeMarketArguments(
+            encodeMarketArguments(
                 _universe,
+                _market,
                 _endTime,
-                1, // TODO
+                _feePerCashInAttoCash,
                 DEFAULT_NUM_TICKS,
                 uint256(_outcomes.length)
             )
         );
 
-        return market;
+        return _market;
     }
 
     function createScalarMarket(
@@ -104,7 +106,7 @@ contract AugurSyncer is Ownable {
         uint256 _numTicks,
         string memory _extraInfo
     ) public returns (IMarket) {
-        IMarket market = _universe.createScalarMarket(
+        IMarket _market = _universe.createScalarMarket(
             _endTime,
             _feePerCashInAttoCash,
             _affiliateFeeDivisor,
@@ -114,18 +116,19 @@ contract AugurSyncer is Ownable {
             _extraInfo
         );
 
-        _syncWithCommand(
+        syncWithCommand(
             SYNC_MARKET_INFO_CMD,
-            _encodeMarketArguments(
+            encodeMarketArguments(
                 _universe,
+                _market,
                 _endTime,
-                1, // TODO
+                _feePerCashInAttoCash,
                 _numTicks,
                 DEFAULT_NUM_OUTCOMES
             )
         );
 
-        return market;
+        return _market;
     }
 
     function migrateMarketIn(
@@ -135,7 +138,7 @@ contract AugurSyncer is Ownable {
         uint256 _marketOI
     ) public onlyOwner {
         _universe.migrateMarketIn(_market, _cashBalance, _marketOI);
-        _syncWithCommand(
+        syncWithCommand(
             SYNC_MARKET_MIGRATION_CMD,
             abi.encode(_universe, _market)
         );
@@ -143,23 +146,26 @@ contract AugurSyncer is Ownable {
 
     function syncReportingFee(IUniverse _universe) public onlyOwner {
         uint256 newFee = _universe.getOrCacheReportingFeeDivisor();
-        _syncWithCommand(
+        syncWithCommand(
             SYNC_REPORTING_FEE_CMD,
             abi.encode(_universe, newFee)
         );
     }
 
-    function _syncWithCommand(uint256 cmd, bytes memory data) private {
+    function syncWithCommand(uint256 cmd, bytes memory data) private {
         stateSender.syncState(marketRegistry, abi.encode(cmd, data));
     }
 
-    function _encodeMarketArguments(
+    function encodeMarketArguments(
         IUniverse universe,
+        IMarket market,
         uint256 endTime,
         uint256 creatorFee,
         uint256 numTicks,
         uint256 numberOfOutcomes
     ) private pure returns (bytes memory) {
-        return abi.encode(universe, endTime, creatorFee, numTicks, numberOfOutcomes);
+        return abi.encode(universe, market, endTime, creatorFee, numTicks, numberOfOutcomes);
     }
+
+    function onTransferOwnership(address, address) internal {}
 }
