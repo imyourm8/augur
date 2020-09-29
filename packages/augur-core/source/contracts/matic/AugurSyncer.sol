@@ -13,6 +13,10 @@ contract AugurSyncer is Ownable {
     uint256 private constant SYNC_REPORTING_FEE_CMD = 2;
     uint256 private constant SYNC_MARKET_MIGRATION_CMD = 3;
 
+    // copy from Universe.sol
+    uint256 constant public DEFAULT_NUM_OUTCOMES = 2;
+    uint256 constant public DEFAULT_NUM_TICKS = 100;
+
     IStateSender public stateSender;
     IRegistry public registry;
     address public marketRegistry;
@@ -47,15 +51,11 @@ contract AugurSyncer is Ownable {
         _syncWithCommand(
             SYNC_MARKET_INFO_CMD,
             _encodeMarketArguments(
-                IMarket.MarketType.YES_NO,
-                abi.encode(
-                    _universe,
-                    _endTime,
-                    _feePerCashInAttoCash,
-                    _affiliateFeeDivisor,
-                    _designatedReporterAddress,
-                    _extraInfo
-                )
+                _universe,
+                _endTime,
+                1, // TODO
+                DEFAULT_NUM_TICKS,
+                DEFAULT_NUM_OUTCOMES
             )
         );
 
@@ -83,15 +83,11 @@ contract AugurSyncer is Ownable {
         _syncWithCommand(
             SYNC_MARKET_INFO_CMD,
             _encodeMarketArguments(
-                IMarket.MarketType.CATEGORICAL,
-                abi.encode(
-                    _universe,
-                    _endTime,
-                    _feePerCashInAttoCash,
-                    _affiliateFeeDivisor,
-                    _designatedReporterAddress,
-                    _extraInfo
-                )
+                _universe,
+                _endTime,
+                1, // TODO
+                DEFAULT_NUM_TICKS,
+                uint256(_outcomes.length)
             )
         );
 
@@ -121,15 +117,11 @@ contract AugurSyncer is Ownable {
         _syncWithCommand(
             SYNC_MARKET_INFO_CMD,
             _encodeMarketArguments(
-                IMarket.MarketType.SCALAR,
-                abi.encode(
-                    _universe,
-                    _endTime,
-                    _feePerCashInAttoCash,
-                    _affiliateFeeDivisor,
-                    _designatedReporterAddress,
-                    _extraInfo
-                )
+                _universe,
+                _endTime,
+                1, // TODO
+                _numTicks,
+                DEFAULT_NUM_OUTCOMES
             )
         );
 
@@ -162,9 +154,12 @@ contract AugurSyncer is Ownable {
     }
 
     function _encodeMarketArguments(
-        IMarket.MarketType marketType,
-        bytes memory args
+        IUniverse universe,
+        uint256 endTime,
+        uint256 creatorFee,
+        uint256 numTicks,
+        uint256 numberOfOutcomes
     ) private pure returns (bytes memory) {
-        return abi.encode(uint256(marketType), args);
+        return abi.encode(universe, endTime, creatorFee, numTicks, numberOfOutcomes);
     }
 }
