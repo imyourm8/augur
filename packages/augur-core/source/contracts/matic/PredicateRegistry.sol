@@ -1,4 +1,4 @@
-pragma solidity 0.5.10;
+pragma solidity 0.5.15;
 import "ROOT/libraries/Ownable.sol";
 
 contract PredicateRegistry is Ownable {
@@ -27,7 +27,6 @@ contract PredicateRegistry is Ownable {
 
     // matic contracts
     address public zeroXTrade;
-    address public oiCash;
     address public defaultExchange;
     address public cash;
     address public shareToken;
@@ -53,10 +52,6 @@ contract PredicateRegistry is Ownable {
         if (isDefaultExchange) {
             defaultExchange = childExchange;
         }
-    }
-
-    function setOICash(address _oiCash) public onlyOwner  {
-        oiCash = _oiCash;
     }
 
     function setCash(address _cash) public onlyOwner  {

@@ -1,9 +1,9 @@
-pragma solidity 0.5.10;
+pragma solidity 0.5.15;
 
 import { Cash } from "ROOT/Cash.sol";
 
 contract ExitCashFactory {
-  function deploy() public returns(address cash) {
-    cash = address(new Cash());
+  function deploy() public returns(address) {
+    return address(new Cash());
   }
 }

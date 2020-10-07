@@ -73,7 +73,7 @@ contract AugurSyncer is Ownable {
     }
 
     function syncMarketFinalized(Market _market) public {
-        require(_market.isFinalized(), 'market is not finalized');
+        require(_market.isFinalized(), "market is not finalized");
 
         syncWithCommand(
             SYNC_MARKET_FINALIZE_CMD,

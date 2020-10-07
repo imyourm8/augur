@@ -1,4 +1,4 @@
-pragma solidity 0.5.10;
+pragma solidity 0.5.15;
 
 import 'ROOT/libraries/Initializable.sol';
 
@@ -12,14 +12,22 @@ contract ExecutorAcl is Initializable {
     // }
 
     modifier onlyPredicate() {
-        require(msg.sender == _augurPredicate, "ExecutorAcl.onlyPredicate is authorized");
+        _assertOnlyPredicate();
         _;
     }
 
     // When _isExecuting is set, token transfer approvals etc. within the matic sandbox will be bypassed
     modifier isExecuting() {
-        require(_isExecuting, 'Needs to be executing');
+        _assertIsExecuting();
         _;
+    }
+
+    function _assertOnlyPredicate() private view {
+        require(msg.sender == _augurPredicate, "ExecutorAcl.onlyPredicate is authorized");
+    }
+
+    function _assertIsExecuting() private view {
+        require(_isExecuting, 'Needs to be executing');
     }
 
     function setIsExecuting(bool executing) public onlyPredicate {

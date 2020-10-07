@@ -1,4 +1,4 @@
-pragma solidity 0.5.10;
+pragma solidity 0.5.15;
 pragma experimental ABIEncoderV2;
 
 import {PredicateRegistry} from 'ROOT/matic/PredicateRegistry.sol';
@@ -9,7 +9,6 @@ import {ProofReader} from 'ROOT/matic/libraries/ProofReader.sol';
 import {IWithdrawManager} from 'ROOT/matic/plasma/IWithdrawManager.sol';
 import {IErc20Predicate} from 'ROOT/matic/plasma/IErc20Predicate.sol';
 import {ShareTokenPredicate} from 'ROOT/matic/ShareTokenPredicate.sol';
-import {IStateSender} from 'ROOT/matic/plasma/IStateSender.sol';
 import {IRegistry} from 'ROOT/matic/plasma/IRegistry.sol';
 import {IDepositManager} from 'ROOT/matic/plasma/IDepositManager.sol';
 import {ExitCashFactory} from 'ROOT/matic/ExitCashFactory.sol';
@@ -34,9 +33,6 @@ contract AugurPredicate is Initializable {
 
     event ExitFinalized(uint256 indexed exitId, address indexed exitor);
 
-    uint256 internal constant MAX_LOGS = 10;
-
-    IStateSender public stateSender;
     PredicateRegistry public predicateRegistry;
     IWithdrawManager public withdrawManager;
     IErc20Predicate public erc20Predicate;
@@ -46,26 +42,20 @@ contract AugurPredicate is Initializable {
     IShareToken public augurShareToken;
     IZeroXTrade public zeroXTrade;
     Cash public augurCash;
-    OICash public oICash;
+    OICash public oiCash;
     IRegistry public registry;
     ExitShareTokenFactory public exitShareTokenFactory;
     ExitCashFactory public exitCashFactory;
-    address public childOICash;
+    IDepositManager public depositManager;
 
     mapping(address => bool) claimedTradingProceeds;
     uint256 private constant MAX_APPROVAL_AMOUNT = 2**256 - 1;
 
-    // keccak256('transfer(address,uint256)').slice(0, 4)
     bytes4 constant TRANSFER_FUNC_SIG = 0xa9059cbb;
     bytes4 constant ZEROX_TRADE_FUNC_SIG = 0x089042f7;
-
-    // keccak256('joinBurn(address,uint256)').slice(0, 4)
     bytes4 constant BURN_FUNC_SIG = 0xf11f299e;
 
-    // keccak256('Burn(address,uint256)').slice(0, 4)
     bytes32 constant BURN_EVENT_SIG = 0xcc16f5dbb4873280815c1ee09dbd06736cffcc184412cf7a71a0fdb75d397ca5;
-
-    // keccak256('Withdraw(address,address,uint256,uint256,uint256)')
     bytes32 constant WITHDRAW_EVENT_SIG = 0xebff2602b3f468259e1e99f613fed6691f3a6526effe6ef3e768ba7ae7a36c4f;
 
     enum ExitStatus {
@@ -75,6 +65,7 @@ contract AugurPredicate is Initializable {
         InProgress,
         Finalized
     }
+
     struct ExitData {
         IShareToken exitShareToken;
         Cash exitCash;
@@ -116,17 +107,17 @@ contract AugurPredicate is Initializable {
         ShareTokenPredicate _shareTokenPredicate,
         IRegistry _registry,
         ExitShareTokenFactory _exitShareTokenFactory,
-        ExitCashFactory _exitCashFactory
-    ) public /* @todo make part of initialize() */
-    {
+        ExitCashFactory _exitCashFactory,
+        IDepositManager _depositManager
+    ) public {
+        depositManager = _depositManager;
         exitCashFactory = _exitCashFactory;
         exitShareTokenFactory = _exitShareTokenFactory;
         registry = _registry;
         predicateRegistry = _predicateRegistry;
         withdrawManager = _withdrawManager;
         erc20Predicate = _erc20Predicate;
-        oICash = _oICash;
-        childOICash = predicateRegistry.oiCash();
+        oiCash = _oICash;
 
         augurCash = Cash(_mainAugur.lookup('Cash'));
         shareTokenPredicate = _shareTokenPredicate;
@@ -138,24 +129,26 @@ contract AugurPredicate is Initializable {
         );
     }
 
-    function updateChildChainAndStateSender() public {
-        (, address _stateSender) = registry.getChildChainAndStateSender();
-        stateSender = IStateSender(_stateSender);
-    }
-
     function deposit(uint256 amount) public {
         require(
             augurCash.transferFrom(msg.sender, address(this), amount),
             '6' // "Cash transfer failed"
         );
         require(
-            oICash.deposit(amount),
+            oiCash.deposit(amount),
             '19' // "OICash deposit failed"
         );
-        stateSender.syncState(
-            predicateRegistry.cash(),
-            abi.encode(msg.sender, amount, true)
-        );
+        // use deposit bulk to ignore deposit limit
+
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(oiCash);
+
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = amount;
+
+        oiCash.approve(address(depositManager), amount);
+
+        depositManager.depositBulk(tokens, amounts, address(this));
     }
 
     /**
@@ -288,10 +281,12 @@ contract AugurPredicate is Initializable {
             uint256 _numOutcomes,
             uint256 _numTicks
         ) = predicateRegistry.childToRootMarket(market);
+
         require(
             _rootMarket != address(0x0),
             '15' // "AugurPredicate:_addMarketToExit: Market does not exist"
         );
+
         if (!lookupExit[exitId].markets[_rootMarket]) {
             lookupExit[exitId].markets[_rootMarket] = true;
             lookupExit[exitId].marketsList.push(IMarket(_rootMarket));
@@ -497,10 +492,10 @@ contract AugurPredicate is Initializable {
         lookupExit[exitId].startExitTime = now;
 
         uint256 withdrawExitId = lookupExit[exitId].exitPriority << 1;
-        address rootToken = address(oICash);
+        address rootToken = address(oiCash);
         withdrawManager.addExitToQueue(
             exitor,
-            childOICash,
+            predicateRegistry.cash(), // OICash maps to TradingCash on matic
             rootToken,
             exitId, // exitAmountOrTokenId - think of exitId like a token Id
             bytes32(0), // txHash - field not required for now
@@ -551,13 +546,10 @@ contract AugurPredicate is Initializable {
             lookupExit[exitId].status = ExitStatus.Finalized;
         }
 
-        (bool oiCashWithdrawSuccess, uint256 feesOwed) = oICash.withdraw(
-            payout
-        );
+        depositManager.transferAssets(address(oiCash), address(this), payout);
 
-        stateSender.syncState(
-            predicateRegistry.cash(),
-            abi.encode(exitor, payout, false)
+        (bool oiCashWithdrawSuccess, uint256 feesOwed) = oiCash.withdraw(
+            payout
         );
 
         require(oiCashWithdrawSuccess, '7'); // "oiCash withdraw has failed"
@@ -651,7 +643,7 @@ contract AugurPredicate is Initializable {
 
         if (completeSetsToBuy > 0) {
             require(
-                oICash.buyCompleteSets(market, completeSetsToBuy),
+                oiCash.buyCompleteSets(market, completeSetsToBuy),
                 '5' // "buying complete sets failed"
             );
         }
@@ -726,15 +718,14 @@ contract AugurPredicate is Initializable {
                 return false;
             }
 
-            PredicateRegistry.DeprecationType t = predicateRegistry
+            PredicateRegistry.DeprecationType _type = predicateRegistry
                 .getDeprecationType(to);
 
-            // TODO perform 1 call to registry and return some enum instead
-            if (t == PredicateRegistry.DeprecationType.Default) {
+            if (_type == PredicateRegistry.DeprecationType.Default) {
                 return true;
-            } else if (t == PredicateRegistry.DeprecationType.ShareToken) {
+            } else if (_type == PredicateRegistry.DeprecationType.ShareToken) {
                 return shareTokenPredicate.isValidDeprecation(txData);
-            } else if (t == PredicateRegistry.DeprecationType.Cash) {
+            } else if (_type == PredicateRegistry.DeprecationType.Cash) {
                 bytes4 funcSig = ProofReader.getFunctionSignature(txData);
 
                 if (funcSig == TRANSFER_FUNC_SIG || funcSig == BURN_FUNC_SIG) {
