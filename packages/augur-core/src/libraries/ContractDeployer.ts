@@ -40,6 +40,7 @@ import {
     WETH9,
     TestNetReputationToken,
     UniswapV2Router02,
+    AugurPredicate
 } from './ContractInterfaces';
 import { Contracts, ContractData } from './Contracts';
 import { Dependencies } from './GenericContractInterfaces';
@@ -47,6 +48,21 @@ import { NetworkId } from '@augurproject/utils';
 import { ContractAddresses, SDKConfiguration, mergeConfig } from '@augurproject/utils';
 import { updateConfig } from '@augurproject/artifacts';
 import { TRADING_CONTRACTS, RELAY_HUB_SIGNED_DEPLOY_TX, RELAY_HUB_DEPLOYER_ADDRESS, RELAY_HUB_ADDRESS } from './constants';
+
+const IGNORE_ADDR_MAPPING = [
+    'IAugur', 
+    'IDisputeCrowdsourcer', 
+    'IDisputeWindow', 'IUniverse', 
+    'IMarket', 
+    'IReportingParticipant', 
+    'IReputationToken', 
+    'IOrders', 
+    'IShareToken', 
+    'Order', 
+    'IV2ReputationToken', 
+    'IInitialReporter', 
+    'TradingCash'
+]
 
 const NULL_ADDRESS = '0x0000000000000000000000000000000000000000';
 
@@ -352,7 +368,7 @@ Deploying to: ${env}
 
             if (contract.contractName !== 'Map' && contract.relativeFilePath.startsWith('libraries/')) continue;
             if (['Cash', 'USDC', 'USDT'].includes(contract.contractName)) continue;
-            if (['IAugur', 'IDisputeCrowdsourcer', 'IDisputeWindow', 'IUniverse', 'IMarket', 'IReportingParticipant', 'IReputationToken', 'IOrders', 'IShareToken', 'Order', 'IV2ReputationToken', 'IInitialReporter'].includes(contract.contractName)) continue;
+            if (IGNORE_ADDR_MAPPING.includes(contract.contractName)) continue;
             if (contract.address === undefined) throw new Error(`${contract.contractName} not uploaded.`);
 
             mapping[contract.contractName] = contract.address;
@@ -543,6 +559,7 @@ Deploying to: ${env}
 
     private async upload(contract: ContractData): Promise<void> {
         const contractName = contract.contractName;
+        if (contractName === 'TradingCash') return;
         if (contractName === 'Augur') return;
         if (contractName === 'Delegator') return;
         if (contractName === 'TimeControlled') return;
@@ -626,6 +643,13 @@ Deploying to: ${env}
         console.log('Initializing contracts...');
 
         const readiedPromises = [
+            async () => {
+                const augurPredicateContract = await this.getContractAddress('AugurPredicateTest');
+                const augurPredicate = new AugurPredicate(this.dependencies, augurPredicateContract);
+                console.log('Initializing AugurPredicate contract');
+                await augurPredicate.initialize(this.augur!.address, this.augurTrading!.address, await this.getContractAddress('ExitZeroXTrade'));
+                console.log('Initialized AugurPredicate contract');
+            },
             async () => {
                 const contract = new ShareToken(this.dependencies, await this.getContractAddress('ShareToken'));
                 if (await contract.getInitialized_()) {

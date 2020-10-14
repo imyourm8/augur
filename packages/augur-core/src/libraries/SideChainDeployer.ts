@@ -68,7 +68,7 @@ Deploying to: ${env}
         if (!this.configuration.deploy.isProduction) {
             sideChainExternalAddresses = {
                 Cash: this.configuration.addresses.Cash,
-                MarketGetter: this.configuration.addresses.Cash,
+                MarketGetter: this.configuration.addresses['MarketGetter'],
                 RepFeeTarget: this.configuration.addresses.Cash,
                 ZeroXExchange: this.configuration.addresses.Exchange
             }

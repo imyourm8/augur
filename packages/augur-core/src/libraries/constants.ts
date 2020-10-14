@@ -145,6 +145,20 @@ export const EXTERNAL_CONTRACTS = [
     // AMM
     'AMMExchange',
     'AMMFactory',
+    // Matic
+    'AugurPredicate',
+    'AugurSyncer',
+    'AugurPredicateTest',
+    'ShareTokenPredicate',
+    'ExitZeroXTrade',
+    'ExitShareToken',
+    'ExitCash',
+    'TradingCash',
+    'AugurRegistry',
+    'PredicateRegistry',
+    'ExitCashFactory',
+    'ExitShareTokenFactory',
+    'MarketRegistry'
 ];
 
 export const REGISTERED_EXTERNAL_CONTRACTS = [

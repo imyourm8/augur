@@ -1,6 +1,9 @@
 import { BigNumber } from "bignumber.js";
 import * as c from "./GenericContractInterfaces";
 export * from "./GenericContractInterfaces";
+
+export class AugurPredicate extends c.AugurPredicate<BigNumber> {
+}
 export class Contract extends c.Contract<BigNumber> {
 }
 export class ERC1155Proxy extends c.ERC1155Proxy<BigNumber> {

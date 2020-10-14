@@ -51,4 +51,6 @@ contract IExchange {
     /// @param signature Proof that order has been created by maker.
     /// @return Amounts filled and fees paid by maker and taker.
     function fillOrder(Order memory order, uint256 takerAssetFillAmount, bytes memory signature) public payable returns (FillResults memory fillResults);
+
+    function isValidSignature(Order memory order, bytes32 orderHash, bytes memory signature) public view returns (bool);
 }

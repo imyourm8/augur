@@ -156,6 +156,7 @@ export interface ContractAddresses extends TradingAddresses {
   Augur: string;
   LegacyReputationToken: string;
   Cash: string;
+  MarketGetter?: string;
   USDC: string;
   USDT: string;
   ShareToken: string;

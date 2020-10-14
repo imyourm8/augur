@@ -20431,3 +20431,14 @@ export class RepSymbol<TBigNumber> extends Contract<TBigNumber> {
 	}
 }
 
+export class AugurPredicate<TBigNumber> extends Contract<TBigNumber> {
+	public constructor(dependencies: Dependencies<TBigNumber>, address: string) {
+		super(dependencies, address)
+	}
+
+	public initialize = async (augur: string, augurTrading: string, zeroXTrade: string, options?: { sender?: string }): Promise<Array<Event>> => {
+		options = options || {}
+		const abi: AbiFunction = {"constant":false,"inputs":[{"name":"_augur","type":"address", "internalType": "address"}, {"name":"_augurTrading","type":"address", "internalType": "address"}, {"name":"_zeroXTrade","type":"address", "internalType": "address"}],"name":"initialize","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"}
+		return await this.remoteCall(abi, [augur, augurTrading, zeroXTrade], 'initialize', options.sender)
+	}
+}
