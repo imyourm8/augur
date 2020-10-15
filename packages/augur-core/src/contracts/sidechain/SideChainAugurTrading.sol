@@ -89,14 +89,11 @@ contract SideChainAugurTrading {
     function doApproval() private returns (bool) {
         address _fillOrder = registry["FillOrder"];
         shareToken = ISideChainShareToken(augur.lookup("ShareToken"));
-        ICash _cash = ICash(augur.lookup("Cash"));
         marketGetter = IMarketGetter(augur.lookup("MarketGetter"));
 
         require(shareToken != ISideChainShareToken(0));
-        require(_cash != ICash(0));
 
         shareToken.setApprovalForAll(_fillOrder, true);
-        _cash.approve(_fillOrder, MAX_APPROVAL_AMOUNT);
     }
 
     /**

@@ -144,21 +144,21 @@ contract SideChainShareToken is ITyped, Initializable, ERC1155, ReentrancyGuard 
         }
 
         {
-        uint256[] memory _tokenIds = new uint256[](_numOutcomes - 1);
-        uint256[] memory _values = new uint256[](_numOutcomes - 1);
-        uint256 _outcome = 0;
+            uint256[] memory _tokenIds = new uint256[](_numOutcomes - 1);
+            uint256[] memory _values = new uint256[](_numOutcomes - 1);
+            uint256 _outcome = 0;
 
-        for (uint256 _i = 0; _i < _numOutcomes - 1; _i++) {
-            if (_outcome == _longOutcome) {
+            for (uint256 _i = 0; _i < _numOutcomes - 1; _i++) {
+                if (_outcome == _longOutcome) {
+                    _outcome++;
+                }
+                _tokenIds[_i] = TokenId.getTokenId(_market, _outcome);
+                _values[_i] = _amount;
                 _outcome++;
             }
-            _tokenIds[_i] = TokenId.getTokenId(_market, _outcome);
-            _values[_i] = _amount;
-            _outcome++;
-        }
 
-        _mintBatch(_shortRecipient, _tokenIds, _values, bytes(""), false);
-        _mint(_longRecipient, TokenId.getTokenId(_market, _longOutcome), _amount, bytes(""), false);
+            _mintBatch(_shortRecipient, _tokenIds, _values, bytes(""), false);
+            _mint(_longRecipient, TokenId.getTokenId(_market, _longOutcome), _amount, bytes(""), false);
         }
 
         augur.logMarketOIChanged(_universe, _market, marketOI[_market]);

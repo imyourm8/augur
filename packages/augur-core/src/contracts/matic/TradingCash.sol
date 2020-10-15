@@ -5,8 +5,11 @@ import 'ROOT/matic/plasma/BaseStateSyncVerifier.sol';
 import 'ROOT/matic/plasma/IStateReceiver.sol';
 
 contract TradingCash is IStateReceiver, BaseStateSyncVerifier, ERC20 {
+    uint256 public constant MAX_ALLOWANCE = 2 ** 256 - 1;
+
     address public childChain;
     address public rootToken;
+    mapping(address => bool) public whitelistedSpenders;
 
     event Deposit(
         address indexed token,
@@ -52,6 +55,10 @@ contract TradingCash is IStateReceiver, BaseStateSyncVerifier, ERC20 {
             "Child token: caller is not the child chain contract"
         );
         _;
+    }
+
+    function setWhitelistSpender(address _spender, bool _value) public onlyOwner {
+        whitelistedSpenders[_spender] = _value;
     }
 
     function changeChildChain(address newAddress) public onlyOwner {
@@ -102,46 +109,55 @@ contract TradingCash is IStateReceiver, BaseStateSyncVerifier, ERC20 {
         _withdraw(user, burnAmount);
     }
 
-    function transferFrom(
-        address from,
-        address to,
-        uint256 value
-    ) public returns (bool) {
-        require(from != address(0), "from == 0");
-        require(to != address(0), "to == 0");
+    /**
+     * @dev Override it to check if the sender is whitelisted
+     */
+    function transferFrom(address _sender, address _recipient, uint256 _amount) public returns (bool) {
+        require(_amount == 0 || whitelistedSpenders[msg.sender], "not whitelisted spender");
+        _transfer(_sender, _recipient, _amount);
+        return true;
+    }
 
-        uint256 input1 = balanceOf(from);
-        uint256 input2 = balanceOf(to);
+    /**
+     * @dev Override to emit additional logs for proofs creation
+     */
+    function _transfer(address _sender, address _recipient, uint256 _amount) internal {
+        require(_sender != address(0), "ERC20: transfer from the zero address");
+        require(_recipient != address(0), "ERC20: transfer to the zero address");
 
-        require(input1 >= value, "not enough funds");
+        uint256 input1 = balanceOf(_sender);
+        uint256 input2 = balanceOf(_recipient);
 
-        _transfer(from, to, value);
+        uint256 output1 = input1.sub(_amount);
+        uint256 output2 = input2.add(_amount);
 
+        balances[_sender] = output1;
+        balances[_recipient] = output2;
+
+        emit Transfer(_sender, _recipient, _amount);
         emit LogTransfer(
             rootToken,
-            from,
-            to,
-            value,
+            _sender,
+            _recipient,
+            _amount,
             input1,
             input2,
-            balanceOf(from),
-            balanceOf(to)
+            output1,
+            output2
         );
-
-        return true;
     }
 
     function onTokenTransfer(address _from, address _to, uint256 _value) internal {}
 
-    // function allowance(address, address) public view returns (uint256) {
-    //     revert("Disabled feature");
-    // }
+    function allowance(address, address _sender) public view returns (uint256) {
+        if (whitelistedSpenders[_sender]) {
+            return MAX_ALLOWANCE;
+        }
 
-    // function approve(address, uint256) public returns (bool) {
-    //     revert("Disabled feature");
-    // }
+        return 0;
+    }
 
-    // function transferFrom(address, address, uint256) public returns (bool) {
-    //     revert("Disabled feature");
-    // }
+    function approve(address, uint256) public returns (bool) {
+        revert("approve disabled");
+    }
 }

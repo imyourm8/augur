@@ -438,7 +438,6 @@ contract SideChainFillOrder is Initializable, ReentrancyGuard {
         require(storedContracts.shareToken != ISideChainShareToken(0));
         zeroXTrade = _augurTrading.lookup("ZeroXTrade");
         require(zeroXTrade != address(0));
-        _cash.approve(address(_augur), MAX_APPROVAL_AMOUNT);
     }
 
     function fillZeroXOrder(address _market, uint256 _outcome, uint256 _price, Order.Types _orderType, address _creator, uint256 _amount, bytes32 _tradeGroupId, address _filler) external returns (uint256 _amountRemaining, uint256 _fees) {
