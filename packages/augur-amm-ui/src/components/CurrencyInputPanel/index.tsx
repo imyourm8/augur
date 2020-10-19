@@ -1,5 +1,5 @@
 import { Currency, Pair } from '@uniswap/sdk'
-import React, { useCallback, useContext, useState } from 'react'
+import React, { useContext } from 'react'
 import styled, { ThemeContext } from 'styled-components'
 import { darken } from 'polished'
 import { useCurrencyBalance } from '../../state/wallet/hooks'
@@ -8,7 +8,6 @@ import DoubleCurrencyLogo from '../DoubleLogo'
 import { RowBetween } from '../Row'
 import { TYPE } from '../../Theme'
 import { Input as NumericalInput } from '../NumericalInput'
-import { ReactComponent as DropDown } from '../../assets/dropdown.svg'
 import { useActiveWeb3React } from '../../hooks'
 import { useTranslation } from 'react-i18next'
 
@@ -56,16 +55,6 @@ const Aligner = styled.span`
   display: flex;
   align-items: center;
   justify-content: space-between;
-`
-
-const StyledDropDown = styled(DropDown)<{ selected: boolean }>`
-  margin: 0 0.25rem 0 0.5rem;
-  height: 35%;
-
-  path {
-    stroke: ${({ selected, theme }) => (selected ? theme.text1 : theme.white)};
-    stroke-width: 1.5px;
-  }
 `
 
 const InputPanel = styled.div<{ hideInput?: boolean }>`
@@ -149,15 +138,9 @@ export default function CurrencyInputPanel({
 }: CurrencyInputPanelProps) {
   const { t } = useTranslation()
 
-  //const [modalOpen, setModalOpen] = useState(false)
   const { account } = useActiveWeb3React()
   const selectedCurrencyBalance = useCurrencyBalance(account ?? undefined, currency ?? undefined)
   const theme = useContext(ThemeContext)
-  const [modalOpen, setModalOpen] = useState(false)
-
-  const handleDismissSearch = useCallback(() => {
-    setModalOpen(false)
-  }, [setModalOpen])
 
   return (
     <InputPanel id={id}>
@@ -204,9 +187,7 @@ export default function CurrencyInputPanel({
             className="open-currency-select-button"
             onClick={() => {
               console.log('on click bring up modal')
-              if (!disableCurrencySelect) {
-                setModalOpen(true)
-              }
+              // set modal open
             }}
           >
             <Aligner>

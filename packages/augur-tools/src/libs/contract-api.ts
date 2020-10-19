@@ -23,7 +23,7 @@ import {
 } from '@augurproject/sdk-lite';
 import { SDKConfiguration } from '@augurproject/utils';
 import { BigNumber } from 'bignumber.js';
-import { formatBytes32String } from 'ethers/utils';
+import { ethers } from 'ethers';
 import moment from 'moment';
 import { Account } from '../constants';
 import { makeSigner } from './blockchain';
@@ -61,7 +61,8 @@ export class ContractAPI {
   constructor(
     readonly augur: Augur,
     readonly provider: EthersProvider,
-    public account: Account
+    public account: Account,
+    readonly signer?: ethers.Signer
   ) {}
 
   get dependencies() {
@@ -249,7 +250,7 @@ export class ContractAPI {
     }
 
     const events = await this.augur.contracts.createOrder.publicCreateOrder(
-      type,
+      type.toNumber(),
       numShares,
       price,
       market,
@@ -285,9 +286,9 @@ export class ContractAPI {
       numShares,
       price,
       outcome,
-      formatBytes32String(''),
-      formatBytes32String(''),
-      formatBytes32String('42')
+      ethers.utils.formatBytes32String(''),
+      ethers.utils.formatBytes32String(''),
+      ethers.utils.formatBytes32String('42')
     );
   }
 
@@ -303,8 +304,8 @@ export class ContractAPI {
     await this.augur.contracts.fillOrder.publicFillOrder(
       orderId,
       numShares,
-      formatBytes32String(tradeGroupId),
-      formatBytes32String('')
+      ethers.utils.formatBytes32String(tradeGroupId),
+      ethers.utils.formatBytes32String('')
     );
   }
 
@@ -356,8 +357,8 @@ export class ContractAPI {
       numTicks: new BigNumber(1000),
       numOutcomes: 3,
       outcome,
-      tradeGroupId: formatBytes32String('42'),
-      fingerprint: formatBytes32String('11'),
+      tradeGroupId: ethers.utils.formatBytes32String('42'),
+      fingerprint: ethers.utils.formatBytes32String('11'),
       doNotCreateOrders: false,
       displayMinPrice: new BigNumber(0),
       displayMaxPrice: new BigNumber(1),
@@ -379,28 +380,28 @@ export class ContractAPI {
     const cost = numShares.multipliedBy(price);
     await this.faucetCashUpTo(cost);
     const bestPriceAmount = await this.augur.contracts.trade.publicFillBestOrder_(
-      type,
+      type.toNumber(),
       marketAddress,
       outcome,
       numShares,
       price,
       tradeGroupID,
       new BigNumber(3),
-      formatBytes32String('')
+      ethers.utils.formatBytes32String('')
     );
     if (bestPriceAmount === new BigNumber(0)) {
       throw new Error('Could not take best Order');
     }
 
     await this.augur.contracts.trade.publicFillBestOrder(
-      type,
+      type.toNumber(),
       marketAddress,
       outcome,
       numShares,
       price,
       tradeGroupID,
       new BigNumber(3),
-      formatBytes32String('')
+      ethers.utils.formatBytes32String('')
     );
   }
 
@@ -456,8 +457,8 @@ export class ContractAPI {
         | 7
         | 8,
       outcome,
-      tradeGroupId: formatBytes32String('42'),
-      fingerprint: formatBytes32String('11'),
+      tradeGroupId: ethers.utils.formatBytes32String('42'),
+      fingerprint: ethers.utils.formatBytes32String('11'),
       doNotCreateOrders: false,
       displayMinPrice: new BigNumber(0),
       displayMaxPrice: new BigNumber(1),
@@ -487,8 +488,8 @@ export class ContractAPI {
         | 7
         | 8,
       outcome,
-      tradeGroupId: formatBytes32String('42'),
-      fingerprint: formatBytes32String('11'),
+      tradeGroupId: ethers.utils.formatBytes32String('42'),
+      fingerprint: ethers.utils.formatBytes32String('11'),
       doNotCreateOrders: false,
       displayMinPrice: new BigNumber(0),
       displayMaxPrice: new BigNumber(1),
@@ -520,9 +521,9 @@ export class ContractAPI {
         | 7
         | 8,
       outcome,
-      tradeGroupId: formatBytes32String('42'),
+      tradeGroupId: ethers.utils.formatBytes32String('42'),
       expirationTime: new BigNumber(Date.now() + 10000000),
-      fingerprint: formatBytes32String('11'),
+      fingerprint: ethers.utils.formatBytes32String('11'),
       doNotCreateOrders,
       displayMinPrice: new BigNumber(0),
       displayMaxPrice: new BigNumber(1),
@@ -535,7 +536,7 @@ export class ContractAPI {
   async claimTradingProceeds(
     market: ContractInterfaces.Market,
     shareholder = this.account.address,
-    fingerprint = formatBytes32String('11')
+    fingerprint = ethers.utils.formatBytes32String('11')
   ): Promise<void> {
     await this.augur.contracts.shareToken.claimTradingProceeds(
       market.address,
@@ -562,7 +563,7 @@ export class ContractAPI {
     outcome: BigNumber
   ): Promise<string> {
     const orderID = await this.augur.contracts.orders.getBestOrderId_(
-      type,
+      type.toNumber(),
       market,
       outcome
     );

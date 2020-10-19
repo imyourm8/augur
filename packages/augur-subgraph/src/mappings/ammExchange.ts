@@ -1,94 +1,110 @@
-import { BigInt } from '@graphprotocol/graph-ts/index';
+import { BigInt } from '@graphprotocol/graph-ts';
 import {
   EnterPosition as EnterPositionEvent,
   ExitPosition as ExitPositionEvent,
   SwapPosition as SwapPositionEvent,
-} from '../../generated/templates/AMMExchange/AMMExchange';
-import {
-  AddLiquidityCall,
-  RemoveLiquidityCall,
+  AddLiquidity as AddLiquidityEvent,
+  RemoveLiquidity as RemoveLiquidityEvent,
 } from '../../generated/templates/AMMExchange/AMMExchange';
 import {
   AMMExchange,
   EnterPosition,
   ExitPosition,
-  SwapPosition
-} from "../../generated/schema";
+  AddLiquidity,
+  RemoveLiquidity,
+  SwapPosition,
+} from '../../generated/schema';
+import { updateAMM } from '../utils/helpers/amm';
 
-export function handleAddLiquidity(call: AddLiquidityCall) {
+type PositionEventType = AddLiquidityEvent | RemoveLiquidityEvent | EnterPositionEvent | ExitPositionEvent | SwapPositionEvent;
+type EventConstructor  = AddLiquidity | RemoveLiquidity | EnterPosition | ExitPosition | SwapPosition;
 
-}
-
-export function handleRemoveLiquidity(call: RemoveLiquidityCall) {
-
-}
-
-// Volume = tokens * cash
-export function handleEnterPosition(event: EnterPositionEvent) {
+function buildEvent(EventConstructor: EventConstructor, event: PositionEventType, cash: BigInt, noShares: BigInt, yesShares: BigInt) {
   const id = `${event.transaction.hash.toHex()}-${event.logIndex.toString()}`;
-  let enterPositionEvent = new EnterPosition(id);
+  console.log("Handling event on ammExchange", id)
+
+  let positionEvent = new EventConstructor(id);
+  positionEvent.ammExchange = event.address;
+  positionEvent.cash = cash;
+  positionEvent.noShares = noShares;
+  positionEvent.yesShares = yesShares;
+  positionEvent.sender = event.params.sender;
+  positionEvent.save();
 
   let ammExchange = AMMExchange.load(event.address);
+  let market = ammExchange.market;
+  market.volume = market.volume.plus(noShares.abs());
+  market.volume = market.volume.plus(yesShares.abs());
 
-  enterPositionEvent.ammExchange = event.address;
-  enterPositionEvent.cash = event.params.cash;
-  enterPositionEvent.sender = event.params.sender;
+  market.save();
 
-  if(event.params.buyYes) {
-    enterPositionEvent.yesShares = event.params.outputShares;
-    ammExchange.volumeYes = ammExchange.volumeYes.plus(event.params.outputShares);
+  ammExchange.volumeNo = ammExchange.volumeNo.plus(noShares.abs());
+  ammExchange.volumeYes = ammExchange.volumeYes.plus(yesShares.abs());
 
-    enterPositionEvent.noShares = BigInt.fromI32(0);
+  ammExchange.save();
+
+  updateAMM(event.address);
+
+  return positionEvent;
+}
+
+export function handleAddLiquidity(event: AddLiquidityEvent) {
+  const {
+    cash,
+    noShares,
+    yesShares
+  } = event.params;
+  buildEvent(AddLiquidity, event, cash, noShares, yesShares);
+}
+
+export function handleRemoveLiquidity(event: RemoveLiquidityEvent) {
+  const {
+    cash,
+    noShares,
+    yesShares
+  } = event.params;
+  buildEvent(RemoveLiquidity, event, cash.times(BigInt.fromI32(-1)), noShares.times(BigInt.fromI32(-1)), yesShares.times(BigInt.fromI32(-1)));
+}
+
+export function handleEnterPosition(event: EnterPositionEvent) {
+  const {
+    buyYes,
+    cash,
+    outputShares
+  } = event.params;
+
+  if(buyYes) {
+    buildEvent(EnterPosition, event, cash, BigInt.fromI32(0), outputShares);
   } else {
-    enterPositionEvent.yesShares = BigInt.fromI32(0);
-
-    enterPositionEvent.noShares = event.params.outputShares;
-    ammExchange.volumeNo = ammExchange.volumeNo.plus(enterPositionEvent.noShares);
+    buildEvent(EnterPosition, event, cash, outputShares, BigInt.fromI32(0));
   }
-
-  enterPositionEvent.save();
 }
 
 export function handleExitPosition(event: ExitPositionEvent) {
-  const id = `${event.transaction.hash.toHex()}-${event.logIndex.toString()}`;
-  let exitPositionEvent = new ExitPosition(id);
+  const {
+    cashPayout,
+    invalidShares,
+    noShares,
+    yesShares
+  } = event.params;
 
-  let ammExchange = AMMExchange.load(event.address);
-
-  exitPositionEvent.ammExchange = event.address;
-  exitPositionEvent.cash = event.params.cashPayout;
-  exitPositionEvent.invalidShares = event.params.invalidShares;
-
-  exitPositionEvent.noShares = event.params.noShares;
-  ammExchange.volumeNo = ammExchange.volumeNo.plus(enterPositionEvent.noShares);
-
-  exitPositionEvent.yesShares = event.params.yesShares;
-  ammExchange.volumeYes = ammExchange.volumeYes.plus(enterPositionEvent.yesShares);
-
-  exitPositionEvent.save();
+  let exitPosition = buildEvent(ExitPosition, event,
+    cashPayout.times(BigInt.fromI32(-1)), noShares, yesShares);
+  exitPosition.invalidShares = invalidShares;
+  exitPosition.save();
 }
 
 export function handleSwapPosition(event: SwapPositionEvent) {
-  const id = `${event.transaction.hash.toHex()}-${event.logIndex.toString()}`;
-  let swapPositionEvent = new SwapPosition(id);
+  const {
+    inputShares,
+    outputShares
+  } = event.params;
 
-  let ammExchange = AMMExchange.load(event.address);
-
-  swapPositionEvent.ammExchange = event.address;
-
-  if(event.params.inputYes) {
-    swapPositionEvent.yesShares = event.params.inputShares.times(BigInt.fromI32(-1));
-    ammExchange.volumeYes = ammExchange.volumeYes.plus(event.params.inputShares);
-
-    swapPositionEvent.noShares = event.params.outputShares;
-    ammExchange.volumeNo = ammExchange.volumeNo.plus(event.params.outputShares);
+  if (event.params.inputYes) {
+    buildEvent(SwapPosition, event, BigInt.fromI32(0), outputShares,
+      inputShares.times(BigInt.fromI32(-1)));
   } else {
-    swapPositionEvent.noShares = event.params.inputShares.times(BigInt.fromI32(-1));
-    ammExchange.volumeNo = ammExchange.volumeNo.plus(event.params.inputShares);
-
-    swapPositionEvent.yesShares = event.params.outputShares;
-    ammExchange.volumeYes = ammExchange.volumeYes.plus(event.params.outputShares);
+    buildEvent(SwapPosition, event, BigInt.fromI32(0),
+      inputShares.times(BigInt.fromI32(-1)), outputShares);
   }
-
-  swapPositionEvent.save();
 }

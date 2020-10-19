@@ -145,6 +145,7 @@ export const EXTERNAL_CONTRACTS = [
     // AMM
     'AMMExchange',
     'AMMFactory',
+    'WethWrapperForAMMExchange',
     // Matic
     'AugurPredicate',
     'AugurSyncer',

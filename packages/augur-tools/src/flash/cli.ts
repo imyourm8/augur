@@ -10,12 +10,13 @@ import program from 'commander';
 
 import ethereumKeyfileRecognizer from 'ethereum-keyfile-recognizer';
 import { ethers } from 'ethers';
-import { computeAddress } from 'ethers/utils';
 import * as fs from 'fs';
 import * as readlineSync from 'readline-sync';
 import { Account, ACCOUNTS } from '../constants';
+import { addAMMScripts } from './amm';
 import { FlashSession } from './flash';
 import { addGanacheScripts } from './ganache-scripts';
+import { addParaScripts } from './para';
 import { addScripts } from './scripts';
 
 import { addWarpSyncScripts } from './warp-sync';
@@ -60,7 +61,9 @@ async function run() {
   const flash = new FlashSession([]);
 
   addScripts(flash);
+  addAMMScripts(flash);
   addGanacheScripts(flash);
+  addParaScripts(flash);
   addWarpSyncScripts(flash);
 
   program
@@ -150,7 +153,7 @@ function accountFromPrivateKey(key: string): Account {
   key = cleanKey(key);
   return {
     privateKey: key,
-    address: computeAddress(key),
+    address: ethers.utils.computeAddress(key),
     initialBalance: 0, // not used here; only for ganache premining
   }
 }

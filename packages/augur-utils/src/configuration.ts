@@ -32,6 +32,7 @@ export interface ParaDeploys {
   [cashAddress: string]: {
     uploadBlockNumber?: number,
     name: string,
+    decimals: number,
     addresses: ParaAddresses
   };
 }
@@ -133,7 +134,9 @@ export interface SDKConfiguration {
     trackMarketInvalidBids?: boolean,
     fallbackProvider?: 'jsonrpc' | 'torus',
     liteProvider?: 'jsonrpc' | 'default',
-    primaryProvider?: 'jsonrpc' | 'wallet'
+    primaryProvider?: 'jsonrpc' | 'wallet',
+    marketCreationEnabled?: boolean,
+    reportingEnabled?: boolean
   },
   concurrentDBOperationsLimit?: number
 }
@@ -205,6 +208,7 @@ export interface ContractAddresses extends TradingAddresses {
 
   // AMM
   AMMFactory?: string;
+  WethWrapperForAMMExchange?: string;
 }
 
 export interface ParaAddresses extends TradingAddresses {
@@ -302,7 +306,7 @@ export const DEFAULT_SDK_CONFIGURATION: SDKConfiguration = {
     autoReport: false,
     ipfsEndpoint: {
       version: IPFSHashVersion.CIDv0,
-      url: 'https://cloudflare-ipfs.com/ipfs/'
+      url: 'https://cloudflare-ipfs.com/'
     }
   },
   uniswap: {
@@ -346,7 +350,9 @@ export const DEFAULT_SDK_CONFIGURATION: SDKConfiguration = {
     trackMarketInvalidBids: true,
     fallbackProvider: 'torus',
     liteProvider: 'jsonrpc',
-    primaryProvider: 'wallet'
+    primaryProvider: 'wallet',
+    marketCreationEnabled: true,
+    reportingEnabled: true
   }
 };
 

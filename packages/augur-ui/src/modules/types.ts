@@ -16,7 +16,7 @@ import type { Getters, PayoutNumeratorValue } from '@augurproject/sdk';
 import type { TransactionMetadataParams, EthersSigner } from '@augurproject/contract-dependencies-ethers';
 import type { BigNumber } from 'utils/create-big-number';
 import type { Template } from '@augurproject/templates';
-import { JsonRpcProvider } from "ethers/providers";
+import { JsonRpcProvider } from '@ethersproject/providers';
 
 export enum SizeTypes {
   SMALL = 'small',
@@ -848,6 +848,7 @@ export interface NavMenuItem {
   showAlert?: boolean;
   button?: boolean;
   alternateStyle?: boolean;
+  hidden?: boolean
 }
 
 export interface SortedGroup {

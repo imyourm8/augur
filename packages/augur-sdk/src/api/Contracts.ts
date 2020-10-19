@@ -26,7 +26,7 @@ export class Contracts {
   time: SomeTime | void;
   legacyReputationToken: ContractInterfaces.LegacyReputationToken;
   simulateTrade: ContractInterfaces.SimulateTrade;
-  ZeroXTrade: ContractInterfaces.ZeroXTrade;
+  ZeroXTrade: ContractInterfaces.ParaZeroXTrade;
   buyParticipationTokens: ContractInterfaces.BuyParticipationTokens;
   redeemStake: ContractInterfaces.RedeemStake;
   hotLoading: ContractInterfaces.HotLoading;
@@ -45,6 +45,7 @@ export class Contracts {
   paraUniverse: ContractInterfaces.ParaUniverse;
   erc20Proxy1155: ContractInterfaces.ERC20Proxy1155Nexus;
   ammFactory: ContractInterfaces.AMMFactory;
+  wethWrapperForAMMExchange: ContractInterfaces.WethWrapperForAMMExchange;
 
   reputationToken: SomeRepToken | null = null;
   private readonly dependencies: ContractDependenciesEthers;
@@ -93,7 +94,7 @@ export class Contracts {
       dependencies,
       addresses.SimulateTrade
     );
-    this.ZeroXTrade = new ContractInterfaces.ZeroXTrade(
+    this.ZeroXTrade = new ContractInterfaces.ParaZeroXTrade(
       dependencies,
       addresses.ZeroXTrade
     );
@@ -269,6 +270,12 @@ export class Contracts {
     address: string
   ): ContractInterfaces.UniswapV2Pair {
     return new ContractInterfaces.UniswapV2Pair(this.dependencies, address);
+  }
+
+  wethWrapperForAMMExchangeFromAddress(
+    address: string
+  ): ContractInterfaces.WethWrapperForAMMExchange {
+    return new ContractInterfaces.WethWrapperForAMMExchange(this.dependencies, address);
   }
 
   async getOriginCash(): Promise<ContractInterfaces.Cash> {

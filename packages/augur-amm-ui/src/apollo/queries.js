@@ -80,7 +80,10 @@ export const GET_MARKETS = gql`
         }
         volumeYes
         volumeNo
+        percentageYes
+        percentageNo
         liquidity
+        cashBalance
         swaps {
           id
           yesShares
@@ -823,6 +826,18 @@ export const TOKEN_DATA = (tokenAddress, block) => {
   `
   return gql(queryString)
 }
+
+export const CASH_TOKEN_DATA = gql`
+query tokenDayDatas($tokenAddr: String!) {
+  tokenDayDatas(first: 1, orderBy: date, orderDirection: desc, where: { token: $tokenAddr }) {
+    id
+    date
+    priceUSD
+  }
+}
+`
+
+
 
 export const FILTERED_TRANSACTIONS = gql`
   query($allPairs: [Bytes]!) {

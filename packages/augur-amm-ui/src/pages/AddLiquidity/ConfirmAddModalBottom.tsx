@@ -13,7 +13,8 @@ export function ConfirmAddModalBottom({
   currencies,
   parsedAmounts,
   poolTokenPercentage,
-  onAdd
+  onAdd,
+  distribution
 }: {
   noLiquidity?: boolean
   price?: Fraction
@@ -21,6 +22,7 @@ export function ConfirmAddModalBottom({
   parsedAmounts: { [field in Field]?: CurrencyAmount }
   poolTokenPercentage?: Percent
   onAdd: () => void
+  distribution: number[]
 }) {
   return (
     <>
@@ -32,31 +34,21 @@ export function ConfirmAddModalBottom({
         </RowFixed>
       </RowBetween>
       <RowBetween>
-        <TYPE.body>{currencies[Field.CURRENCY_B]?.symbol} Deposited</TYPE.body>
-        <RowFixed>
-          <TokenLogo tokenInfo={currencies[Field.CURRENCY_B]} style={{ marginRight: '8px' }} />
-          <TYPE.body>{parsedAmounts[Field.CURRENCY_B]?.toSignificant(6)}</TYPE.body>
-        </RowFixed>
-      </RowBetween>
-      <RowBetween>
-        <TYPE.body>Rates</TYPE.body>
+        <TYPE.body>Yes</TYPE.body>
         <TYPE.body>
-          {`1 ${currencies[Field.CURRENCY_A]?.symbol} = ${price?.toSignificant(4)} ${
-            currencies[Field.CURRENCY_B]?.symbol
-          }`}
-        </TYPE.body>
-      </RowBetween>
-      <RowBetween style={{ justifyContent: 'flex-end' }}>
-        <TYPE.body>
-          {`1 ${currencies[Field.CURRENCY_B]?.symbol} = ${price?.invert().toSignificant(4)} ${
-            currencies[Field.CURRENCY_A]?.symbol
-          }`}
+          {`${distribution[0]} %`}
         </TYPE.body>
       </RowBetween>
       <RowBetween>
+        <TYPE.body>No</TYPE.body>
+        <TYPE.body>
+          {`${distribution[1]} %`}
+        </TYPE.body>
+      </RowBetween>
+      {/*<RowBetween>
         <TYPE.body>Share of Pool:</TYPE.body>
         <TYPE.body>{noLiquidity ? '100' : poolTokenPercentage?.toSignificant(4)}%</TYPE.body>
-      </RowBetween>
+      </RowBetween>*/}
       <ButtonPrimary style={{ margin: '20px 0 0 0' }} onClick={onAdd}>
         <Text fontWeight={500} fontSize={20}>
           {noLiquidity ? 'Create Pool & Supply' : 'Confirm Supply'}

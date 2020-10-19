@@ -8,6 +8,7 @@ import { TYPE } from '../../Theme'
 
 const TitleWrapper = styled.div`
   text-decoration: none;
+  width: 200px;
 
   &:hover {
     cursor: pointer;
@@ -22,7 +23,7 @@ export default function Title() {
   return (
     <TitleWrapper onClick={() => history.push('/')}>
       <Flex alignItems="start">
-        <RowFixed style={{ justifyContent: 'flex-start', alignItems: 'end' }}>
+        <RowFixed style={{ justifyContent: 'flex-start', alignItems: 'end', flexFlow: 'row nowrap' }}>
           <svg width="96" height="32" viewBox="0 0 120 40" fill="none">
             <path
               fillRule="evenodd"

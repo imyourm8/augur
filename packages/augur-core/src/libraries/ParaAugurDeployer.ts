@@ -14,7 +14,7 @@ import { Contracts, ContractData } from './Contracts';
 import { Dependencies } from './GenericContractInterfaces';
 import { ParaAddresses, SDKConfiguration, mergeConfig } from '@augurproject/utils';
 import { updateConfig } from '@augurproject/artifacts';
-import { Block, BlockTag } from 'ethers/providers/abstract-provider';
+import { Block, BlockTag } from '@ethersproject/providers';
 import { stringTo32ByteHex } from './HelperFunctions';
 
 
@@ -55,7 +55,7 @@ Deploying to: ${env}
     }
 
     async getBlockNumber(): Promise<number> {
-        return this.provider.getBlock('latest', false).then( (block) => block.number);
+        return this.provider.getBlock('latest').then( (block) => block.number);
     }
 
     async deploy(env: string, cashAddress: string): Promise<void> {
@@ -102,11 +102,13 @@ Deploying to: ${env}
         };
 
         const name = await cash.symbol_();
+        const decimals = await cash.decimals_();
 
         const configUpdate = {
             paraDeploys: {
                 [cash.address]: {
                     name,
+                    decimals,
                     uploadBlockNumber,
                     addresses,
                 }

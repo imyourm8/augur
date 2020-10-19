@@ -19,14 +19,14 @@ const InputPanel = styled.div<{ disabled?: boolean }>`
 interface DistributionPanelProps {
   updateDistribution: Function
   disableInputs?: boolean
-  currentDistribution: number[]
+  distroPercentage: number[]
   id: string
 }
 
 export default function DistributionPanel({
   updateDistribution,
   disableInputs = false,
-  currentDistribution = [50, 50],
+  distroPercentage = [50, 50],
   id
 }: DistributionPanelProps) {
   const YES = 'YES'
@@ -34,26 +34,28 @@ export default function DistributionPanel({
   const NO = 'NO'
   const NO_ID = 1
 
-  const [yesInput, setYesInput] = useState(currentDistribution[YES_ID])
-  const [noInput, setNoInput] = useState(currentDistribution[NO_ID])
+  const [yesInput, setYesInput] = useState(distroPercentage[YES_ID])
+  const [noInput, setNoInput] = useState(distroPercentage[NO_ID])
 
   const setDistributionInput = (value: number, type) => {
-    console.log(value)
+    let yes, no = 0
     if (isNaN(value) || value > 100) {
       setYesInput(0)
       setNoInput(0)
       return
     }
     if (type === YES) {
-      setYesInput(value)
-      setNoInput(100 - value)
+      yes = value
+      no = 100 - value
     }
 
     if (type === NO) {
-      setNoInput(value)
-      setYesInput(100 - value)
+      no = value
+      yes = 100 - value
     }
-    updateDistribution([yesInput, noInput])
+    setYesInput(yes)
+    setNoInput(no)
+    updateDistribution([yes, no])
   }
   return (
     <>

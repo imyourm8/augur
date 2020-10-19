@@ -7,7 +7,7 @@ import { Contracts, ContractData } from './Contracts';
 import { Dependencies, ParaDeployer } from './GenericContractInterfaces';
 import { SDKConfiguration, mergeConfig } from '@augurproject/utils';
 import { updateConfig } from '@augurproject/artifacts';
-import { Block, BlockTag } from 'ethers/providers/abstract-provider';
+import { Block, BlockTag } from '@ethersproject/providers';
 
 const CONTRACTS = [
     "FeePotFactory",
@@ -63,7 +63,7 @@ Deploying to: ${env}
     }
 
     async getBlockNumber(): Promise<number> {
-        return this.provider.getBlock('latest', false).then( (block) => block.number);
+        return this.provider.getBlock('latest').then( (block) => block.number);
     }
 
     async deploy(env: string): Promise<void> {
@@ -110,8 +110,11 @@ Deploying to: ${env}
         const oiNexus = new OINexus(this.dependencies, addresses["OINexus"]);
         oiNexus.transferOwnership(paraDeployerAddress)
         const paraDeployer = new ParaDeployer(this.dependencies, paraDeployerAddress);
+        
         // TODO add more tokens?
         await paraDeployer.addToken(this.configuration.addresses.WETH9, new BigNumber(10**19));
+        await paraDeployer.addToken(this.configuration.addresses.USDC, new BigNumber(10**30));
+        await paraDeployer.addToken(this.configuration.addresses.USDT, new BigNumber(10**30));
 
         if (!this.configuration.deploy.writeArtifacts) return;
 

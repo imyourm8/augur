@@ -3,7 +3,7 @@ import { updateSdk } from 'modules/auth/actions/update-sdk';
 import { toChecksumAddress } from 'ethereumjs-util';
 import { ThunkDispatch } from 'redux-thunk';
 import { Action } from 'redux';
-import { Web3Provider } from 'ethers/providers';
+import { Web3Provider } from '@ethersproject/providers';
 import {
   ACCOUNT_TYPES,
   MODAL_NETWORK_MISMATCH,
@@ -56,6 +56,7 @@ export const loginWithInjectedWeb3 = () => async (
 
     // Listen for MetaMask account switch
     if (windowRef.ethereum?.on) {
+      windowRef.ethereum.autoRefreshOnNetworkChange = false
       windowRef.ethereum.on('accountsChanged', async accounts => {
         const loginAccount = getState().loginAccount;
         if (loginAccount.address) {

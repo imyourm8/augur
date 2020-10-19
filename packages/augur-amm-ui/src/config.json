@@ -1,7 +1,6 @@
 {
   "1": {
     "Multicall": "0xeefba1e63905ef1d7acba5a8513c70307c1ce441",
-    "AmmFactory": "",
     "Cashes": [
       { "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", "name": "wrapped ETH", "symbol": "wETH" },
       {
@@ -15,7 +14,6 @@
   },
   "42": {
     "Multicall": "0x2cc8688c5f75e365aaeeb4ea8d6a480405a48d2a",
-    "AmmFactory": "0x667C97e2783fc2A014fA8Bca82bf0Bd9bbb38E4d",
     "Cashes": [
       {
         "address": "0x7290c2b7D5Fc91a112d462fe06aBBB8948668f56",
@@ -24,10 +22,16 @@
         "asset": "weth.svg"
       },
       {
-        "address": "0x5bc0ceB4d813282C4468288C8AB42Af5e7a43B27",
+        "address": "0x25e27c08B7B3f2159aC23e4711801e0F7aD270A3",
         "name": "DAI",
         "symbol": "DAI",
         "asset": "dai.svg"
+      },
+      {
+        "address": "0x1997d08B1a9aeD5143b995e929707400625D5f6C",
+        "name": "USDT",
+        "symbol": "USDT",
+        "asset": "usdt.svg"
       }
     ],
     "augurClient": "https://api.thegraph.com/subgraphs/name/augurproject/augur-v2-staging",

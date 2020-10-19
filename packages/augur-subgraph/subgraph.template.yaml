@@ -135,12 +135,22 @@ dataSources:
       file: ./src/index.ts
       entities:
         - AMMExchange
+        - ParaShareToken
+        - ERC20
       abis:
+        - name: AMMExchange
+          file: ./abis/AMMExchange.json
         - name: AMMFactory
           file: ./abis/AMMFactory.json
+        - name: ParaShareToken
+          file: ./abis/ParaShareToken.json
+        - name: ERC20
+          file: ./abis/ERC20.json
       callHandlers:
         - function: addAMM(address,address)
           handler: handleAddAMMExchange
+        - function: addAMMWithLiquidity(address,address,uint256,uint256,bool)
+          handler: handleAddAMMExchangeWithLiquidity
   - kind: ethereum/contract
     name: ParaDeployer
     network: {{ ethereum.network }}
@@ -185,10 +195,9 @@ templates:
           handler: handleExitPosition
         - event: SwapPosition(address,uint256,uint256,bool)
           handler: handleSwapPosition
-      callHandlers:
-        - function: addLiquidity(uint256)
+        - event: AddLiquidity(address,uint256,uint256,uint256,uint256)
           handler: handleAddLiquidity
-        - function: removeLiquidity(uint256,uint256)
+        - event: RemoveLiquidity(address,uint256,uint256,uint256)
           handler: handleRemoveLiquidity
   - kind: ethereum/contract
     name: Cash
@@ -208,6 +217,22 @@ templates:
       eventHandlers:
         - event: Transfer(indexed address,indexed address,uint256)
           handler: handleCashTransfer
+  - kind: ethereum/contract
+    name: ParaShareToken
+    network: {{ ethereum.network }}
+    source:
+      abi: ParaShareToken
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.4
+      language: wasm/assemblyscript
+      file: ./src/index.ts
+      entities:
+        - ERC20
+      abis:
+        - name: ParaShareToken
+          file: ./abis/ParaShareToken.json
+
 
 # Markets
   # - MarketParticipantsDisavowed(indexed address,indexed address)

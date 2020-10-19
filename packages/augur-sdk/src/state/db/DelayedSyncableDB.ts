@@ -77,4 +77,9 @@ export class DelayedSyncableDB extends BaseSyncableDB {
 
     this.syncing = false;
   }
+
+  async reset() {
+    await this.syncStatus.setHighestSyncBlock(this.dbName, 0, false);
+    await this.db.dexieDB[this.dbName].clear();
+  }
 }

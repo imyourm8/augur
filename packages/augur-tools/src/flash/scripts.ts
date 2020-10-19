@@ -10,7 +10,6 @@ import {
   NativePlaceTradeDisplayParams,
   QUINTILLION,
   stringTo32ByteHex,
-  AMM,
 } from '@augurproject/sdk';
 import {
   MarketList,
@@ -28,11 +27,10 @@ import {
   runWsServer,
   runWssServer,
 } from '@augurproject/sdk/build/state/WebsocketEndpoint';
-import { printConfig, sanitizeConfig, binarySearch } from '@augurproject/utils';
+import { printConfig, sanitizeConfig } from '@augurproject/utils';
 import { BigNumber } from 'bignumber.js';
 import { spawn, spawnSync } from 'child_process';
 import { ethers } from 'ethers';
-import { formatBytes32String } from 'ethers/utils';
 import * as CIDTool from 'cid-tool';
 
 import * as fs from 'fs';
@@ -399,7 +397,7 @@ export function addScripts(flash: FlashSession) {
         }
       }
       if (cat) {
-        const outcomes = ['first', 'second', 'third', 'fourth', 'fifth'].map(formatBytes32String);
+        const outcomes = ['first', 'second', 'third', 'fourth', 'fifth'].map(ethers.utils.formatBytes32String);
         const market = await user.createReasonableMarket(outcomes, title);
         console.log(`Created Categorical market "${market.address}".`);
         if (orders) {
@@ -454,7 +452,7 @@ export function addScripts(flash: FlashSession) {
       const user = await this.createUser(this.getAccount(), this.config);
       const outcomes: string[] = (args.outcomes as string)
         .split(',')
-        .map(formatBytes32String);
+        .map(ethers.utils.formatBytes32String);
       const title = args.title as string || 'Categorical market description';
       const market = await user.createReasonableMarket(outcomes, title);
       console.log(`Created Categorical market "${market.address}".`);
@@ -1131,7 +1129,8 @@ export function addScripts(flash: FlashSession) {
 
       const onChainShares = convertDisplayAmountToOnChainAmount(
         new BigNumber(String(args.amount)),
-        new BigNumber(1000)
+        new BigNumber(1000),
+        new BigNumber(10**18),
       );
       const onChainPrice = convertDisplayPriceToOnChainPrice(
         new BigNumber(String(Number(args.price).toFixed(2))),
@@ -1163,7 +1162,7 @@ export function addScripts(flash: FlashSession) {
           numOutcomes: 3 as NumOutcomes,
           outcome: Number(args.outcome) as 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7,
           tradeGroupId,
-          fingerprint: formatBytes32String('11'),
+          fingerprint: ethers.utils.formatBytes32String('11'),
           doNotCreateOrders: false,
           displayMinPrice: new BigNumber(0),
           displayMaxPrice: new BigNumber(1),
@@ -1391,84 +1390,6 @@ export function addScripts(flash: FlashSession) {
 
       const ethSource = await this.createUser(this.getAccount(), this.config);
       await perfSetup(ethSource, 0, traderCount, serial, this.config);
-    },
-  });
-
-  flash.addScript({
-    name: 'all-logs',
-    options: [
-      {
-        name: 'v1',
-        description: 'Fetch logs from V1 contracts.',
-        flag: true,
-      },
-      {
-        name: 'from',
-        abbr: 'f',
-        description: 'First block from which to request logs.',
-      },
-      {
-        name: 'to',
-        abbr: 't',
-        description: 'Final block from which to request logs.',
-      },
-    ],
-    async call(this: FlashSession, args: FlashArguments) {
-      if (this.noProvider()) return;
-
-      const v1 = Boolean(args.v1);
-      const fromBlock = Number(args.from || 0);
-      const toBlock =
-        args.to === null || args.to === 'latest' ? 'latest' : Number(args.to);
-
-      const logs = await this.provider.getLogs({
-        address: this.config.addresses.Augur,
-        fromBlock,
-        toBlock,
-        topics: [],
-      });
-
-      const logsWithBlockNumber = logs.map(log => ({
-        ...log,
-        logIndex: log.logIndex || 0,
-        transactionHash: log.transactionHash || '',
-        transactionIndex: log.transactionIndex || 0,
-        blockNumber: log.blockNumber || 0,
-        blockHash: log.blockHash || '0',
-        removed: log.removed || false,
-      }));
-
-      const contractEvents = new ContractEvents(
-        this.provider,
-        this.config.addresses
-      );
-      let parsedLogs = contractEvents.parseLogs(logsWithBlockNumber);
-
-      // Logs from AugurV1 require additional calls to the blockchain.
-      if (v1) {
-        parsedLogs = await Promise.all(
-          parsedLogs.map(async log => {
-            if (log.name === 'OrderCreated') {
-              const { shareToken } = log;
-              const shareTokenContract = new ethers.Contract(
-                shareToken,
-                new ethers.utils.Interface(abiV1.ShareToken),
-                this.provider
-              );
-              const market = await shareTokenContract.functions['getMarket']();
-              const outcome = (await shareTokenContract.functions[
-                'getOutcome'
-              ]()).toNumber();
-
-              return Object.assign({}, log, { market, outcome });
-            } else {
-              return log;
-            }
-          })
-        );
-      }
-
-      console.log(JSON.stringify(parsedLogs, null, 2));
     },
   });
 
@@ -2715,85 +2636,6 @@ export function addScripts(flash: FlashSession) {
       },
     });
 
-    flash.addScript({
-      name: 'deploy-amm',
-      options: [],
-      async call(this: FlashSession, args: FlashArguments) {
-        const serial = !Boolean(args.parallel);
-        if (this.noProvider()) return;
-
-        this.pushConfig({ deploy: { serial }});
-        console.log('Deploying: ', sanitizeConfig(this.config).deploy);
-
-        const signer = await makeSigner(this.accounts[0], this.provider);
-        const dependencies = makeDependencies(this.accounts[0], this.provider, signer);
-
-        const contractDeployer = new ContractDeployer(
-          this.config,
-          dependencies,
-          this.provider.provider,
-          signer,
-          compilerOutput
-        );
-
-        await contractDeployer.uploadAMMContracts();
-      }
-    })
-
-    flash.addScript({
-      name: 'deploy-para-augur',
-      options: [],
-      async call(this: FlashSession, args: FlashArguments) {
-        const provider = await providerFromConfig(this.config);
-        const signer = await makeSigner(this.accounts[0], provider);
-        const dependencies = new ContractDependenciesEthers(
-          provider,
-          signer,
-          signer.address
-        );
-
-        const deployer = new ParaContractDeployer(
-          this.config,
-          dependencies,
-          provider,
-          signer,
-          compilerOutput,
-        )
-        await deployer.deploy(this.network);
-      }
-    });
-
-    flash.addScript({
-      name: 'para-deploy',
-      options: [
-        {
-          name: 'cash',
-          abbr: 'c',
-          description: 'address of ERC20 cash contract to point this para-augur at: THIS IS ONLY WETH RIGHT NOW',
-          required: false,
-        }
-      ],
-      async call(this: FlashSession, args: FlashArguments) {
-        const cash = args.cash as string;
-
-        const provider = await providerFromConfig(this.config);
-        const signer = await makeSigner(this.accounts[0], provider);
-        const dependencies = new ContractDependenciesEthers(
-          provider,
-          signer,
-          signer.address
-        );
-
-        const deployer = new ParaAugurDeployer(
-          this.config,
-          dependencies,
-          provider,
-          signer,
-          compilerOutput,
-        )
-        await deployer.deploy(this.network, cash);
-      }
-    });
 
     flash.addScript({
       name: 'wrap-eth',
@@ -2878,162 +2720,29 @@ export function addScripts(flash: FlashSession) {
       }
     });
 
-    flash.addScript({
-      name: 'amm-approve-factory',
-      options: [
-        {
-          name: 'amount',
-          abbr: 'a',
-          description: 'How many atto to approve for. Defaults to 1e48 (1e18 atto = 1 ETH, so that\'s a lot)',
-        },
-      ],
-      async call(this: FlashSession, args: FlashArguments) {
-        const user = await this.createUser(this.getAccount(), this.config);
-        const amount = new BigNumber(args.amount as string || 1e48);
+  flash.addScript({
+    name: 'wrapped-eth-allowance',
+    options: [
+      {
+        name: 'target',
+        abbr: 't',
+        description: 'Address that has an allowance granted by the approver.',
+        required: true,
+      },
+      {
+        name: 'approver',
+        abbr: 'a',
+        description: 'Address of the token owner. Default to you.',
+      },
+    ],
+    async call(this: FlashSession, args: FlashArguments) {
+      const user = await this.createUser(this.getAccount(), this.config);
+      const target = args.target as string;
+      const approver = args.approver as string || user.account.address;
 
-        // TODO support more than just weth
-        const weth = user.augur.contracts.weth;
-        const factory = user.augur.contracts.ammFactory;
-        await weth.approve(factory.address, amount);
-      }
-    });
-
-    flash.addScript({
-      name: 'make-amm-market',
-      options: [
-        {
-          name: 'market',
-          abbr: 'm',
-          description: 'Address of Market.',
-          required: true,
-        },
-      ],
-      async call(this: FlashSession, args: FlashArguments) {
-        const market = args.market as string;
-
-        const paraShareToken = this.config.paraDeploys[this.config.paraDeploy].addresses.ShareToken;
-        const user = await this.createUser(this.getAccount(), this.config);
-        const factory = user.augur.contracts.ammFactory;
-        const addr = await factory.addAMM_(market, paraShareToken);
-        await factory.addAMM(market, paraShareToken);
-        console.log(`AMM Exchange ${addr}`);
-      }
-    });
-
-    flash.addScript({
-      name: 'amm-add-liquidity',
-      options: [
-        {
-          name: 'market',
-          abbr: 'm',
-          description: 'Address of Market. Used to calculate AMM address.',
-          required: true,
-        },
-        {
-          name: 'sets',
-          abbr: 's',
-          description: 'How many sets you will mint then add to the LP. Cost in cash is sets * market.numticks.',
-          required: true,
-        },
-      ],
-      async call(this: FlashSession, args: FlashArguments) {
-        const user = await this.createUser(this.getAccount(), this.config);
-
-        const market = user.augur.contracts.marketFromAddress(args.market as string);
-        const sets = new BigNumber(args.sets as string);
-
-        const paraShareToken = this.config.paraDeploys[this.config.paraDeploy].addresses.ShareToken;
-        const factory = user.augur.contracts.ammFactory;
-        const addr = await factory.exchanges_(market.address, paraShareToken);
-        const numTicks = await market.getNumTicks_();
-        const amm = new AMM(user.augur.contracts.ammFromAddress(addr), numTicks);
-
-        const lpTokens = await amm.addLiquidity(sets);
-
-        console.log(`LP Tokens acquired: ${lpTokens}`);
-      }
-    });
-
-    flash.addScript({
-      name: 'amm-calc-enter-position',
-      options: [
-        {
-          name: 'market',
-          abbr: 'm',
-          description: 'Address of Market. Used to calculate AMM address.',
-          required: true,
-        },
-        {
-          name: 'shares',
-          abbr: 's',
-          description: 'How many atto shares you want.',
-          required: true,
-        },
-        {
-          name: 'yes',
-          abbr: 'y',
-          description: 'Specify if you want to buy Yes shares. Else, you get No shares.',
-          flag: true,
-        },
-      ],
-      async call(this: FlashSession, args: FlashArguments) {
-        const user = await this.createUser(this.getAccount(), this.config);
-
-        const market = user.augur.contracts.marketFromAddress(args.market as string);
-        const shares = new BigNumber(args.shares as string);
-        const yes = Boolean(args.yes);
-
-        const paraShareToken = this.config.paraDeploys[this.config.paraDeploy].addresses.ShareToken;
-        const factory = user.augur.contracts.ammFactory;
-        const addr = await factory.exchanges_(market.address, paraShareToken);
-        const numTicks = await market.getNumTicks_();
-        const amm = new AMM(user.augur.contracts.ammFromAddress(addr), numTicks);
-
-        const cash = await amm.enterPosition(shares, yes, true);
-
-        console.log(`Cash needed to get "${shares.toFixed()}" shares: ${cash.toFixed()}`);
-      }
-    });
-
-    flash.addScript({
-      name: 'amm-enter-position',
-      options: [
-        {
-          name: 'market',
-          abbr: 'm',
-          description: 'Address of Market. Used to calculate AMM address.',
-          required: true,
-        },
-        {
-          name: 'shares',
-          abbr: 's',
-          description: 'How many atto shares you want.',
-          required: true,
-        },
-        {
-          name: 'yes',
-          abbr: 'y',
-          description: 'Specify if you want to buy Yes shares. Else, you get No shares.',
-          flag: true,
-        },
-      ],
-      async call(this: FlashSession, args: FlashArguments) {
-        const user = await this.createUser(this.getAccount(), this.config);
-
-        const market = user.augur.contracts.marketFromAddress(args.market as string);
-        const shares = new BigNumber(args.shares as string);
-        const yes = Boolean(args.yes);
-
-        const paraShareToken = this.config.paraDeploys[this.config.paraDeploy].addresses.ShareToken;
-        const factory = user.augur.contracts.ammFactory;
-        const addr = await factory.exchanges_(market.address, paraShareToken);
-        const numTicks = await market.getNumTicks_();
-        const amm = new AMM(user.augur.contracts.ammFromAddress(addr), numTicks);
-
-        const cash = await amm.enterPosition(shares, yes);
-
-        console.log(`You paid ${cash.toFixed()} cash for ${shares.toFixed()} ${yes ? 'yes' : 'no'} shares`);
-      }
-    });
-
+      const weth = user.augur.contracts.weth;
+      const allowance = await weth.allowance_(approver, target);
+      console.log(allowance.toFixed())
+    }
+  });
 }

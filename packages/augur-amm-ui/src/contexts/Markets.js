@@ -5,8 +5,6 @@ import utc from 'dayjs/plugin/utc'
 
 import { augurV2Client } from '../apollo/client'
 import { GET_MARKETS } from '../apollo/queries'
-//import { getAMMAddressForMarketShareToken } from '../utils/contractCalls'
-//import { PARA_AUGUR_TOKENS } from '../contexts/TokenData'
 import { useConfig } from '../contexts/Application'
 
 const UPDATE = 'UPDATE'
@@ -106,63 +104,28 @@ export default function Provider({ children }) {
     </MarketDataaContext.Provider>
   )
 }
-/*
-async function getAMMExchangePairs(network, { markets }) {
-  let paraShareTokens = {}
-  if (markets) {
-    // Currently slicing the markets due the the number of ETH calls required for the below
-    // TODO wrap all these getAMMAddressForMarketShareToken calls in multiCall
-    const slicedMarkets = markets.slice(0, 5)
-    for (const market of slicedMarkets) {
-      for (const token of PARA_AUGUR_TOKENS) {
-        const ammExchange = await getAMMAddressForMarketShareToken(network, market.id, token)
-        paraShareTokens[ammExchange] = {
-          id: ammExchange,
-          token0: {
-            id: token,
-            symbol: token === PARA_AUGUR_TOKENS[0] ? 'ETH' : 'DAI',
-            name: token === PARA_AUGUR_TOKENS[0] ? 'Ether (Wrapped)' : 'Dai Stablecoin',
-            totalLiquidity: '0',
-            derivedETH: '0',
-            __typename: 'Token'
-          },
-          token1: {
-            id: market.id,
-            symbol: market.description,
-            name: 'ParaAugur',
-            totalLiquidity: '0',
-            derivedETH: '0',
-            __typename: 'Token'
-          }
-        }
-      }
-    }
+
+async function getMarketsData(updateMarkets, config) {
+  let response = null
+  try {
+    console.log('call the graph to get market data')
+    response = await augurV2Client(config.augurClient).query({ query: GET_MARKETS })
+  } catch (e) {
+    console.error(e)
   }
-  return paraShareTokens
+
+  if (response) {
+    console.log(JSON.stringify(response.data, null, 1))
+    updateMarkets(response.data)
+  }
 }
-*/
+
 export function Updater() {
   const config = useConfig()
-  const [, { updateMarkets, updateParaShareTokens }] = useMarketDataContext()
+  const [, { updateMarkets }] = useMarketDataContext()
   useEffect(() => {
-    async function getData() {
-      let response = null
-      try {
-        console.log('call the graph to get market data')
-        response = await augurV2Client(config.augurClient).query({ query: GET_MARKETS })
-      } catch (e) {
-        console.error(e)
-      }
-
-      if (response) {
-        console.log(JSON.stringify(response.data, null, 1))
-        updateMarkets(response.data)
-        //const ammExchangePairs = await getAMMExchangePairs(config.network, response.data)
-        //updateParaShareTokens(ammExchangePairs)
-      }
-    }
-    getData()
-  }, [updateMarkets, updateParaShareTokens, config])
+    getMarketsData(updateMarkets, config)
+  }, [updateMarkets, config])
   return null
 }
 
@@ -188,8 +151,8 @@ export function useAllMarketCashes() {
 export function useShareTokens(cash) {
   const [state] = useMarketDataContext()
   const shareToken =
-    state?.paraShareTokens ?? state?.paraShareTokens.find(s => s.cash.id.toLowerCase() === cash?.toLowerCase())
-  return shareToken?.id
+    state?.paraShareTokens ?? (state?.paraShareTokens || []).find(s => s.cash.id.toLowerCase() === cash?.toLowerCase())
+  return shareToken[0].id
 }
 
 export function useMarketAmm(marketId, amm) {
@@ -202,16 +165,30 @@ export function useMarketAmm(marketId, amm) {
 
   return {
     ...ammExchange,
+    hasLiquidity: ammExchange?.liquidity  && ammExchange?.liquidity !== "0",
     id: ammExchange?.id,
     cash: ammExchange?.shareToken?.cash?.id,
     sharetoken: ammExchange?.shareToken?.id
   }
 }
 
+export function useMarketAmmExchanges(marketId) {
+  const market = useMarket(marketId)
+  const ammExchanges = market && market.amms && market.amms.length > 0 ? market.amms : []
+
+  return ammExchanges.map(ammExchange => ({
+    ...ammExchange,
+    hasLiquidity: ammExchange?.liquidity  && ammExchange?.liquidity !== "0",
+    id: ammExchange?.id,
+    cash: ammExchange?.shareToken?.cash?.id,
+    sharetoken: ammExchange?.shareToken?.id
+  }))
+}
+
 export function useMarketNonExistingAmms(marketId) {
   const [state] = useMarketDataContext()
   const market = useMarket(marketId)
-  const ammCashes = market.amms && market.amms.length > 0 ? market.amms.map(a => a.shareToken.cash.id) : []
+  const ammCashes = market && market.amms && market.amms.length > 0 ? market.amms.map(a => a.shareToken.cash.id) : []
   const uncreatedAmms =
     state?.paraShareTokens && state.paraShareTokens.length > 0
       ? state.paraShareTokens.reduce((p, s) => (ammCashes.includes(s.cash.id) ? p : [...p, s.cash.id]), [])
@@ -224,4 +201,31 @@ export function useMarketCashes() {
   const [state] = useMarketDataContext()
   const cashes = state?.paraShareTokens ? state?.paraShareTokens.reduce((p, s) => [...p, s.cash.id], []) : []
   return cashes
+}
+
+export function usePositionMarkets(positions) {
+  const [state] = useMarketDataContext()
+  const { markets } = state
+  const marketPositions = Object.keys(positions).map(marketId => {
+    const market = markets.find(m => m.id === marketId)
+    return { market, ...positions[marketId]}
+  })
+  return marketPositions;
+}
+
+export function useAmmMarkets(balances) {
+  const [state] = useMarketDataContext()
+  const { markets } = state
+  const ammMarkets = []
+  if (markets) {
+    console.log(JSON.stringify(Object.keys(balances)))
+    Object.keys(balances).map(ammId => {
+      const balance = balances[ammId];
+      const market = markets.find(m => m.amms.map(a => a.id).includes(ammId))
+      if (market && balance !== "0") {
+        ammMarkets.push({...market, balance})
+      }
+    })
+  }
+  return ammMarkets
 }
