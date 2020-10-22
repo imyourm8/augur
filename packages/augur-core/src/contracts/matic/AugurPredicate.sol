@@ -525,28 +525,28 @@ contract AugurPredicate is Initializable, IAugurPredicate {
     }
 
     function startExit() external {
-        address exitor = msg.sender;
-        uint256 exitId = getExitId(exitor);
-        require(
-            lookupExit[exitId].status == ExitStatus.Initialized ||
-                lookupExit[exitId].status == ExitStatus.InFlightExecuted,
-            '9' // "incorrect status"
-        );
-        lookupExit[exitId].status = ExitStatus.InProgress;
-        lookupExit[exitId].startExitTime = now;
+        // address exitor = msg.sender;
+        // uint256 exitId = getExitId(exitor);
+        // require(
+        //     lookupExit[exitId].status == ExitStatus.Initialized ||
+        //         lookupExit[exitId].status == ExitStatus.InFlightExecuted,
+        //     '9' // "incorrect status"
+        // );
+        // lookupExit[exitId].status = ExitStatus.InProgress;
+        // lookupExit[exitId].startExitTime = now;
 
-        uint256 withdrawExitId = lookupExit[exitId].exitPriority << 1;
-        address rootToken = address(oiCash);
-        withdrawManager.addExitToQueue(
-            exitor,
-            predicateRegistry.cash(), // OICash maps to TradingCash on matic
-            rootToken,
-            exitId, // exitAmountOrTokenId - think of exitId like a token Id
-            bytes32(0), // txHash - field not required for now
-            false, // isRegularExit
-            withdrawExitId
-        );
-        withdrawManager.addInput(withdrawExitId, 0, exitor, rootToken);
+        // uint256 withdrawExitId = lookupExit[exitId].exitPriority << 1;
+        // address rootToken = address(oiCash);
+        // withdrawManager.addExitToQueue(
+        //     exitor,
+        //     predicateRegistry.cash(), // OICash maps to TradingCash on matic
+        //     rootToken,
+        //     exitId, // exitAmountOrTokenId - think of exitId like a token Id
+        //     bytes32(0), // txHash - field not required for now
+        //     false, // isRegularExit
+        //     withdrawExitId
+        // );
+        // withdrawManager.addInput(withdrawExitId, 0, exitor, rootToken);
     }
 
     function onFinalizeExit(bytes calldata data) external {
