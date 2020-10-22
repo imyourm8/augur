@@ -2,6 +2,7 @@ pragma solidity 0.5.15;
 
 import 'ROOT/matic/plasma/IStateReceiver.sol';
 import 'ROOT/matic/plasma/BaseStateSyncVerifier.sol';
+import 'ROOT/matic/TradingCash.sol';
 
 contract AugurRegistry is BaseStateSyncVerifier, IStateReceiver {
     uint256 private constant SYNC_MARKET_INFO_CMD = 1;
@@ -30,6 +31,11 @@ contract AugurRegistry is BaseStateSyncVerifier, IStateReceiver {
     mapping(address => MarketInfo) public markets;
 
     UniverseInfo public universe;
+    TradingCash public feesToken;
+
+    constructor(TradingCash _feesToken) public {
+        feesToken = _feesToken;
+    }
 
     function onStateReceive(
         uint256, /* id */
@@ -156,5 +162,9 @@ contract AugurRegistry is BaseStateSyncVerifier, IStateReceiver {
 
     function getOrCacheReportingFeeDivisor() external view returns (uint256) {
         return universe.reportingFee;
+    }
+
+    function withdrawFees(uint256 _amount) public {
+        feesToken.withdraw(_amount);
     }
 }

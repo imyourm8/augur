@@ -1,32 +1,34 @@
 pragma solidity 0.5.15;
 pragma experimental ABIEncoderV2;
 
-import {PredicateRegistry} from 'ROOT/matic/PredicateRegistry.sol';
-import {BytesLib} from 'ROOT/matic/libraries/BytesLib.sol';
-import {RLPEncode} from 'ROOT/matic/libraries/RLPEncode.sol';
-import {RLPReader} from 'ROOT/matic/libraries/RLPReader.sol';
-import {ProofReader} from 'ROOT/matic/libraries/ProofReader.sol';
-import {IWithdrawManager} from 'ROOT/matic/plasma/IWithdrawManager.sol';
-import {IErc20Predicate} from 'ROOT/matic/plasma/IErc20Predicate.sol';
-import {ShareTokenPredicate} from 'ROOT/matic/ShareTokenPredicate.sol';
-import {IRegistry} from 'ROOT/matic/plasma/IRegistry.sol';
-import {IDepositManager} from 'ROOT/matic/plasma/IDepositManager.sol';
-import {ExitShareToken} from 'ROOT/matic/ExitShareToken.sol';
-import {ExitCash} from 'ROOT/matic/ExitCash.sol';
+import 'ROOT/matic/PredicateRegistry.sol';
+import 'ROOT/matic/libraries/BytesLib.sol';
+import 'ROOT/matic/libraries/RLPEncode.sol';
+import 'ROOT/matic/libraries/RLPReader.sol';
+import 'ROOT/matic/libraries/ProofReader.sol';
+import 'ROOT/matic/plasma/IWithdrawManager.sol';
+import 'ROOT/matic/plasma/IErc20Predicate.sol';
+import 'ROOT/matic/ShareTokenPredicate.sol';
+import 'ROOT/matic/plasma/IRegistry.sol';
+import 'ROOT/matic/plasma/IDepositManager.sol';
+import 'ROOT/matic/IExitShareToken.sol';
+import 'ROOT/matic/IExitCash.sol';
 
-import {ShareToken} from 'ROOT/reporting/ShareToken.sol';
-import {OICash} from 'ROOT/reporting/OICash.sol';
-import {IMarket} from 'ROOT/reporting/IMarket.sol';
-import {IExchange} from 'ROOT/external/IExchange.sol';
-import {ITokenFactory} from 'ROOT/matic/ITokenFactory.sol';
-import {IExitZeroXTrade} from 'ROOT/matic/IExitZeroXTrade.sol';
-import {IAugurTrading} from 'ROOT/trading/IAugurTrading.sol';
-import {IAugur} from 'ROOT/IAugur.sol';
-import {Cash} from 'ROOT/Cash.sol';
-import {Initializable} from 'ROOT/libraries/Initializable.sol';
-import {SafeMathUint256} from 'ROOT/libraries/math/SafeMathUint256.sol';
+import 'ROOT/reporting/ShareToken.sol';
+import 'ROOT/para/interfaces/IParaOICash.sol';
+import 'ROOT/reporting/IMarket.sol';
+import 'ROOT/external/IExchange.sol';
+import 'ROOT/matic/ITokenFactory.sol';
+import 'ROOT/matic/IExitZeroXTrade.sol';
+import 'ROOT/matic/IAugurPredicate.sol';
+import 'ROOT/trading/IAugurTrading.sol';
+import 'ROOT/IAugur.sol';
+import 'ROOT/Cash.sol';
+import 'ROOT/libraries/Initializable.sol';
+import 'ROOT/libraries/math/SafeMathUint256.sol';
+import 'ROOT/para/interfaces/IFeePot.sol';
 
-contract AugurPredicate is Initializable {
+contract AugurPredicate is Initializable, IAugurPredicate {
     using RLPReader for bytes;
     using RLPReader for RLPReader.RLPItem;
     using SafeMathUint256 for uint256;
@@ -42,11 +44,12 @@ contract AugurPredicate is Initializable {
     ShareToken public augurShareToken;
     IExitZeroXTrade public zeroXTrade;
     Cash public augurCash;
-    OICash public oiCash;
+    IParaOICash public oiCash;
     IRegistry public registry;
     ITokenFactory public exitShareTokenFactory;
     ITokenFactory public exitCashFactory;
     IDepositManager public depositManager;
+    IFeePot public rootFeePot;
 
     mapping(address => bool) claimedTradingProceeds;
     uint256 private constant MAX_APPROVAL_AMOUNT = 2**256 - 1;
@@ -67,8 +70,8 @@ contract AugurPredicate is Initializable {
     }
 
     struct ExitData {
-        ExitShareToken exitShareToken;
-        ExitCash exitCash;
+        IExitShareToken exitShareToken;
+        IExitCash exitCash;
         uint256 exitPriority;
         uint256 startExitTime;
         int256 lastGoodNonce;
@@ -105,14 +108,26 @@ contract AugurPredicate is Initializable {
         PredicateRegistry _predicateRegistry,
         IWithdrawManager _withdrawManager,
         IErc20Predicate _erc20Predicate,
-        OICash _oICash,
+        IParaOICash _oICash,
+        Cash _cash,
         IAugur _mainAugur,
         ShareTokenPredicate _shareTokenPredicate,
         IRegistry _registry,
         ITokenFactory _exitShareTokenFactory,
         ITokenFactory _exitCashFactory,
-        IDepositManager _depositManager
+        IDepositManager _depositManager,
+        IFeePot _rootFeePot
     ) public {
+        require(address(_oICash) != address(0x0));
+        require(address(_rootFeePot) != address(0x0));
+        require(address(_erc20Predicate) != address(0x0));
+        require(address(_withdrawManager) != address(0x0));
+        require(address(_predicateRegistry) != address(0x0));
+        require(address(_registry) != address(0x0));
+        require(address(_exitShareTokenFactory) != address(0x0));
+        require(address(_exitCashFactory) != address(0x0));
+        require(address(_depositManager) != address(0x0));
+
         depositManager = _depositManager;
         exitCashFactory = _exitCashFactory;
         exitShareTokenFactory = _exitShareTokenFactory;
@@ -121,8 +136,9 @@ contract AugurPredicate is Initializable {
         withdrawManager = _withdrawManager;
         erc20Predicate = _erc20Predicate;
         oiCash = _oICash;
+        rootFeePot = _rootFeePot;
 
-        augurCash = Cash(_mainAugur.lookup('Cash'));
+        augurCash = _cash;
         shareTokenPredicate = _shareTokenPredicate;
         augurShareToken = ShareToken(_mainAugur.lookup('ShareToken'));
         // The allowance may eventually run out, @todo provide a mechanism to refresh this allowance
@@ -130,6 +146,18 @@ contract AugurPredicate is Initializable {
             augurCash.approve(address(_mainAugur), MAX_APPROVAL_AMOUNT),
             '21' // "Cash approval to Augur failed"
         );
+    }
+
+    function trustedTransfer(address recipient, uint256 amount) external {
+        uint256 payout = withdrawOICash(amount);
+        // TODO, only fee predicate
+        require(augurCash.transfer(recipient, payout));
+    }
+
+    function depositToFeePot(uint256 amount) external {
+        uint256 payout = withdrawOICash(amount);
+        augurCash.approve(address(rootFeePot), payout);
+        require(rootFeePot.depositFees(payout));
     }
 
     function deposit(uint256 amount) public {
@@ -160,27 +188,30 @@ contract AugurPredicate is Initializable {
         however, the intention is to deploy a new ShareToken and Cash contract per exit - todo: use proxies for that
      */
     function initializeForExit() external returns (uint256 exitId) {
-        // exitId = getExitId(msg.sender);
-        // require(
-        //     lookupExit[exitId].status == ExitStatus.Invalid,
-        //     '18' // "Predicate.initializeForExit: Exit is already initialized"
-        // );
-        // address exitCashAddr = exitCashFactory.deploy();
-        // address exitShareTokenAddr = exitShareTokenFactory.deploy();
-        // Cash exitCash = Cash(exitCashAddr);
-        // IShareToken exitShareToken = IShareToken(exitShareTokenAddr);
-        // exitShareToken.initializeFromPredicate(augur, exitCashAddr);
-        // exitCash.initializeFromPredicate(augur);
-        // lookupExit[exitId] = ExitData({
-        //     exitShareToken: exitShareToken,
-        //     exitCash: exitCash,
-        //     exitPriority: 0,
-        //     startExitTime: 0,
-        //     lastGoodNonce: -1,
-        //     inFlightTxHash: bytes32(0),
-        //     status: ExitStatus.Initialized,
-        //     marketsList: new IMarket[](0)
-        // });
+        exitId = getExitId(msg.sender);
+        require(
+            lookupExit[exitId].status == ExitStatus.Invalid,
+            '18' // "Predicate.initializeForExit: Exit is already initialized"
+        );
+        address exitCashAddr = exitCashFactory.deploy();
+        address exitShareTokenAddr = exitShareTokenFactory.deploy();
+
+        IExitCash exitCash = IExitCash(exitCashAddr);
+        IExitShareToken exitShareToken = IExitShareToken(exitShareTokenAddr);
+
+        exitShareToken.initializeFromPredicate(augur, exitCashAddr);
+        exitCash.initializeFromPredicate();
+
+        lookupExit[exitId] = ExitData({
+            exitShareToken: exitShareToken,
+            exitCash: exitCash,
+            exitPriority: 0,
+            startExitTime: 0,
+            lastGoodNonce: -1,
+            inFlightTxHash: bytes32(0),
+            status: ExitStatus.Initialized,
+            marketsList: new IMarket[](0)
+        });
     }
 
     /**
@@ -198,30 +229,30 @@ contract AugurPredicate is Initializable {
      * logIndex Log Index to read from the receipt
      */
     function claimShareBalance(bytes calldata data) external {
-        // uint256 exitId = getExitId(msg.sender);
-        // require(
-        //     lookupExit[exitId].status == ExitStatus.Initialized,
-        //     '16' // "Predicate.claimShareBalance: Please call initializeForExit first"
-        // );
-        // (
-        //     address account,
-        //     address market,
-        //     uint256 outcome,
-        //     uint256 balance,
-        //     uint256 age
-        // ) = shareTokenPredicate.parseData(data);
-        // address rootMarket = _checkAndAddMaticMarket(exitId, market);
-        // setIsExecuting(exitId, true);
-        // lookupExit[exitId].exitPriority = lookupExit[exitId].exitPriority.max(
-        //     age
-        // );
-        // lookupExit[exitId].exitShareToken.mint(
-        //     account,
-        //     rootMarket,
-        //     outcome,
-        //     balance
-        // );
-        // setIsExecuting(exitId, false);
+        uint256 exitId = getExitId(msg.sender);
+        require(
+            lookupExit[exitId].status == ExitStatus.Initialized,
+            '16' // "Predicate.claimShareBalance: Please call initializeForExit first"
+        );
+        (
+            address account,
+            address market,
+            uint256 outcome,
+            uint256 balance,
+            uint256 age
+        ) = shareTokenPredicate.parseData(data);
+        address rootMarket = _checkAndAddMaticMarket(exitId, market);
+        setIsExecuting(exitId, true);
+        lookupExit[exitId].exitPriority = lookupExit[exitId].exitPriority.max(
+            age
+        );
+        lookupExit[exitId].exitShareToken.mint(
+            account,
+            IMarket(rootMarket),
+            outcome,
+            balance
+        );
+        setIsExecuting(exitId, false);
     }
 
     /**
@@ -242,28 +273,28 @@ contract AugurPredicate is Initializable {
     function claimCashBalance(bytes calldata data, address participant)
         external
     {
-        // uint256 exitId = getExitId(msg.sender);
-        // require(
-        //     lookupExit[exitId].status == ExitStatus.Initialized,
-        //     '16' // "Predicate.claimCashBalance: Please call initializeForExit first"
-        // );
-        // bytes memory _preState = erc20Predicate.interpretStateUpdate(
-        //     abi.encode(
-        //         data,
-        //         participant,
-        //         true, /* verifyInclusionInCheckpoint */
-        //         false /* isChallenge */
-        //     )
-        // );
-        // (uint256 closingBalance, uint256 age, , address tokenAddress) = abi
-        //     .decode(_preState, (uint256, uint256, address, address));
-        // require(tokenAddress == predicateRegistry.cash(), '17'); // "not matic cash"
-        // lookupExit[exitId].exitPriority = lookupExit[exitId].exitPriority.max(
-        //     age
-        // );
-        // setIsExecuting(exitId, true);
-        // lookupExit[exitId].exitCash.joinMint(participant, closingBalance);
-        // setIsExecuting(exitId, false);
+        uint256 exitId = getExitId(msg.sender);
+        require(
+            lookupExit[exitId].status == ExitStatus.Initialized,
+            '16' // "Predicate.claimCashBalance: Please call initializeForExit first"
+        );
+        bytes memory _preState = erc20Predicate.interpretStateUpdate(
+            abi.encode(
+                data,
+                participant,
+                true, /* verifyInclusionInCheckpoint */
+                false /* isChallenge */
+            )
+        );
+        (uint256 closingBalance, uint256 age, , address tokenAddress) = abi
+            .decode(_preState, (uint256, uint256, address, address));
+        require(tokenAddress == predicateRegistry.cash(), '17'); // "not matic cash"
+        lookupExit[exitId].exitPriority = lookupExit[exitId].exitPriority.max(
+            age
+        );
+        setIsExecuting(exitId, true);
+        lookupExit[exitId].exitCash.faucet(participant, closingBalance);
+        setIsExecuting(exitId, false);
     }
 
     function _checkAndAddMaticMarket(uint256 exitId, address market)
@@ -282,15 +313,15 @@ contract AugurPredicate is Initializable {
             '15' // "AugurPredicate:_addMarketToExit: Market does not exist"
         );
 
-        // if (!lookupExit[exitId].markets[_rootMarket]) {
-        //     lookupExit[exitId].markets[_rootMarket] = true;
-        //     lookupExit[exitId].marketsList.push(IMarket(_rootMarket));
-        //     lookupExit[exitId].exitShareToken.initializeMarket(
-        //         IMarket(_rootMarket),
-        //         _numOutcomes,
-        //         _numTicks
-        //     );
-        // }
+        if (!lookupExit[exitId].markets[_rootMarket]) {
+            lookupExit[exitId].markets[_rootMarket] = true;
+            lookupExit[exitId].marketsList.push(IMarket(_rootMarket));
+            lookupExit[exitId].exitShareToken.initializeMarket(
+                IMarket(_rootMarket),
+                _numOutcomes,
+                _numTicks
+            );
+        }
         return _rootMarket;
     }
 
@@ -559,12 +590,7 @@ contract AugurPredicate is Initializable {
             lookupExit[exitId].status = ExitStatus.Finalized;
         }
 
-        depositManager.transferAssets(address(oiCash), exitor, payout);
-
-        bool oiCashWithdrawSuccess;
-        (oiCashWithdrawSuccess, payout) = oiCash.withdraw(payout);
-
-        require(oiCashWithdrawSuccess, '7'); // "oiCash withdraw has failed"
+        payout = withdrawOICash(payout);
 
         if (payout > 0) {
             // fees are already deducted in the OICash::withdraw method
@@ -575,6 +601,16 @@ contract AugurPredicate is Initializable {
         }
 
         emit ExitFinalized(exitId, exitor);
+    }
+
+    function withdrawOICash(uint256 amount) private returns(uint256) {
+        depositManager.transferAssets(address(oiCash), address(this), amount);
+
+        (bool oiCashWithdrawSuccess, uint256 payout) = oiCash.withdraw(amount);
+
+        require(oiCashWithdrawSuccess, '7'); // "oiCash withdraw has failed"
+
+        return payout;
     }
 
     function processExitForFinalizedMarket(
@@ -607,7 +643,7 @@ contract AugurPredicate is Initializable {
     ) public view returns (uint256) {
         uint256 numOutcomes = market.getNumberOfOutcomes();
         uint256 payout;
-        ExitShareToken shareToken = lookupExit[exitId].exitShareToken;
+        IExitShareToken shareToken = lookupExit[exitId].exitShareToken;
         for (uint256 outcome = 0; outcome < numOutcomes; outcome++) {
             uint256 sharesOwned = shareToken.balanceOfMarketOutcome(
                 market,
@@ -626,7 +662,7 @@ contract AugurPredicate is Initializable {
         address exitor,
         uint256 exitId
     ) internal {
-        ExitShareToken shareToken = lookupExit[exitId].exitShareToken;
+        IExitShareToken shareToken = lookupExit[exitId].exitShareToken;
         uint256 numOutcomes = market.getNumberOfOutcomes();
         uint256 completeSetsToBuy;
         uint256[] memory outcomes = new uint256[](numOutcomes);

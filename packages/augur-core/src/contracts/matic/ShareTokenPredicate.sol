@@ -1,15 +1,15 @@
 pragma solidity 0.5.15;
 pragma experimental ABIEncoderV2;
 
-import {PredicateRegistry} from 'ROOT/matic/PredicateRegistry.sol';
-import {BytesLib} from 'ROOT/matic/libraries/BytesLib.sol';
-import {RLPEncode} from 'ROOT/matic/libraries/RLPEncode.sol';
-import {RLPReader} from 'ROOT/matic/libraries/RLPReader.sol';
-import {IWithdrawManager} from 'ROOT/matic/plasma/IWithdrawManager.sol';
+import 'ROOT/matic/PredicateRegistry.sol';
+import 'ROOT/matic/libraries/BytesLib.sol';
+import 'ROOT/matic/libraries/RLPEncode.sol';
+import 'ROOT/matic/libraries/RLPReader.sol';
+import 'ROOT/matic/plasma/IWithdrawManager.sol';
 
-import {IShareToken} from 'ROOT/reporting/IShareToken.sol';
-import {IMarket} from 'ROOT/reporting/IMarket.sol';
-import {Initializable} from 'ROOT/libraries/Initializable.sol';
+import 'ROOT/matic/IExitShareToken.sol';
+import 'ROOT/reporting/IMarket.sol';
+import 'ROOT/libraries/Initializable.sol';
 
 contract ShareTokenPredicate is Initializable {
     using RLPReader for bytes;
@@ -95,7 +95,7 @@ contract ShareTokenPredicate is Initializable {
     function executeInFlightTransaction(
         bytes memory txData,
         address signer,
-        IShareToken exitShareToken
+        IExitShareToken exitShareToken
     ) public returns (int256 nonce) {
         RLPReader.RLPItem[] memory txList = txData.toRlpItem().toList();
         nonce = int256(txList[0].toUint());

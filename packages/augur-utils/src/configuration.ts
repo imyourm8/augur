@@ -217,6 +217,7 @@ export interface ParaAddresses extends TradingAddresses {
   ShareToken: string;
   Cash: string;
   OICash?: string;
+  FeePot?: string;
 }
 
 export interface SideChainAddresses {

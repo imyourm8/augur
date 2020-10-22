@@ -61,7 +61,9 @@ const IGNORE_ADDR_MAPPING = [
     'Order', 
     'IV2ReputationToken', 
     'IInitialReporter', 
-    'TradingCash'
+    'TradingCash',
+    'FeePotPredicate',
+    'AugurRegistry'
 ]
 
 const NULL_ADDRESS = '0x0000000000000000000000000000000000000000';
@@ -605,6 +607,7 @@ Deploying to: ${env}
         if (contractName === 'ERC20Proxy1155Nexus') return;
         if (contractName === 'AMMExchange') return;
         if (contractName === 'AMMFactory') return;
+        if (contractName === 'AugurRegistry') return;
         // 0x
         if ([
           'ERC20Proxy',

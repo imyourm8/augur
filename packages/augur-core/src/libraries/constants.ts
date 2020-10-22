@@ -159,7 +159,8 @@ export const EXTERNAL_CONTRACTS = [
     'PredicateRegistry',
     'ExitCashFactory',
     'ExitShareTokenFactory',
-    'MarketRegistry'
+    'MarketRegistry',
+    'FeePotPredicate'
 ];
 
 export const REGISTERED_EXTERNAL_CONTRACTS = [

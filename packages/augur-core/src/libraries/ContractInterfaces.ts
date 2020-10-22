@@ -1,9 +1,6 @@
 import { BigNumber } from "bignumber.js";
 import * as c from "./GenericContractInterfaces";
 export * from "./GenericContractInterfaces";
-
-export class AugurPredicate extends c.AugurPredicate<BigNumber> {
-}
 export class Contract extends c.Contract<BigNumber> {
 }
 export class ERC1155Proxy extends c.ERC1155Proxy<BigNumber> {
@@ -85,6 +82,32 @@ export class Penalizer extends c.Penalizer<BigNumber> {
 export class RelayHubV2 extends c.RelayHubV2<BigNumber> {
 }
 export class StakeManager extends c.StakeManager<BigNumber> {
+}
+export class AugurPredicate extends c.AugurPredicate<BigNumber> {
+}
+export class AugurPredicateTest extends c.AugurPredicateTest<BigNumber> {
+}
+export class AugurRegistry extends c.AugurRegistry<BigNumber> {
+}
+export class AugurSyncer extends c.AugurSyncer<BigNumber> {
+}
+export class ExitCash extends c.ExitCash<BigNumber> {
+}
+export class ExitCashFactory extends c.ExitCashFactory<BigNumber> {
+}
+export class ExitShareToken extends c.ExitShareToken<BigNumber> {
+}
+export class ExitShareTokenFactory extends c.ExitShareTokenFactory<BigNumber> {
+}
+export class ExitZeroXTrade extends c.ExitZeroXTrade<BigNumber> {
+}
+export class FeePotPredicate extends c.FeePotPredicate<BigNumber> {
+}
+export class PredicateRegistry extends c.PredicateRegistry<BigNumber> {
+}
+export class ShareTokenPredicate extends c.ShareTokenPredicate<BigNumber> {
+}
+export class TradingCash extends c.TradingCash<BigNumber> {
 }
 export class AMMExchange extends c.AMMExchange<BigNumber> {
 }

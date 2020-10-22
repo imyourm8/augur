@@ -57,7 +57,7 @@ contract TradingCash is IStateReceiver, BaseStateSyncVerifier, ERC20 {
         _;
     }
 
-    function setWhitelistSpender(address _spender, bool _value) public onlyOwner {
+    function setWhitelistedSpender(address _spender, bool _value) public onlyOwner {
         whitelistedSpenders[_spender] = _value;
     }
 
@@ -81,7 +81,7 @@ contract TradingCash is IStateReceiver, BaseStateSyncVerifier, ERC20 {
         emit Deposit(rootToken, user, amount, input1, balanceOf(user));
     }
 
-    function withdraw(uint256 amount) public payable {
+    function withdraw(uint256 amount) public {
         _withdraw(msg.sender, amount);
     }
 
@@ -119,7 +119,7 @@ contract TradingCash is IStateReceiver, BaseStateSyncVerifier, ERC20 {
     }
 
     /**
-     * @dev Override to emit additional logs for proofs creation
+     * @dev Override to emit additional logs for proof creation
      */
     function _transfer(address _sender, address _recipient, uint256 _amount) internal {
         require(_sender != address(0), "ERC20: transfer from the zero address");

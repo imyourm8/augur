@@ -67,7 +67,8 @@ Deploying to: ${env}
         while (deployProgress.lt(14)) {
             console.log(`Deploy Progress: ${deployProgress}`);
             await this.paraDeployer.progressDeployment(cashAddress);
-            deployProgress = new BigNumber(await this.paraDeployer.paraDeployProgress_(cashAddress));
+            // temporary workaround with possible ganache-cli caching issue
+            deployProgress = deployProgress.plus(new BigNumber(1));
         }
 
         console.log('Writing artifacts');
@@ -98,8 +99,12 @@ Deploying to: ${env}
             Trade: await paraAugurTrading.lookup_(stringTo32ByteHex("Trade")),
             SimulateTrade: await paraAugurTrading.lookup_(stringTo32ByteHex("SimulateTrade")),
             ZeroXTrade: await paraAugurTrading.lookup_(stringTo32ByteHex("ZeroXTrade")),
-            ProfitLoss: await paraAugurTrading.lookup_(stringTo32ByteHex("ProfitLoss"))
+            ProfitLoss: await paraAugurTrading.lookup_(stringTo32ByteHex("ProfitLoss")),
+            FeePot: await paraUniverse.getFeePot_()
         };
+
+        // this line is for matic deployment
+        console.log('addresses', JSON.stringify(addresses))
 
         const name = await cash.symbol_();
         const decimals = await cash.decimals_();
