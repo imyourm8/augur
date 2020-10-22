@@ -32,9 +32,14 @@ contract AugurRegistry is BaseStateSyncVerifier, IStateReceiver {
 
     UniverseInfo public universe;
     TradingCash public feesToken;
+    uint256 public minimumFeesForWithdrawal;
 
     constructor(TradingCash _feesToken) public {
         feesToken = _feesToken;
+    }
+
+    function setMinimumFeesForWithdrawal(uint256 _minFees) public onlyOwner {
+        minimumFeesForWithdrawal = _minFees;
     }
 
     function onStateReceive(
@@ -164,7 +169,10 @@ contract AugurRegistry is BaseStateSyncVerifier, IStateReceiver {
         return universe.reportingFee;
     }
 
-    function withdrawFees(uint256 _amount) public {
-        feesToken.withdraw(_amount);
+    function withdrawFees() public {
+        uint256 withdrawalAmount = feesToken.balanceOf(address(this));
+        require(minimumFeesForWithdrawal <= withdrawalAmount);
+
+        feesToken.withdraw(withdrawalAmount);
     }
 }

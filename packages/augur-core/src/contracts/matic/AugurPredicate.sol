@@ -169,8 +169,8 @@ contract AugurPredicate is Initializable, IAugurPredicate {
             oiCash.deposit(amount),
             '19' // "OICash deposit failed"
         );
-        // use deposit bulk to ignore deposit limit
 
+        // use deposit bulk to ignore deposit limit
         address[] memory tokens = new address[](1);
         tokens[0] = address(oiCash);
 
@@ -607,7 +607,6 @@ contract AugurPredicate is Initializable, IAugurPredicate {
         depositManager.transferAssets(address(oiCash), address(this), amount);
 
         (bool oiCashWithdrawSuccess, uint256 payout) = oiCash.withdraw(amount);
-
         require(oiCashWithdrawSuccess, '7'); // "oiCash withdraw has failed"
 
         return payout;

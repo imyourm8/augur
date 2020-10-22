@@ -95,6 +95,7 @@ contract FeePotPredicate is Ownable, Initializable {
 
         // reward exitor
         uint256 reward = exitAmount.mul(exitorFee).div(FEE_PRECISION);
+
         augurPredicate.trustedTransfer(exitor, reward);
         // deposit the rest
         augurPredicate.depositToFeePot(exitAmount - reward);
