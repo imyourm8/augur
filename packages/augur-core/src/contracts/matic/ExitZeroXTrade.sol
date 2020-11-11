@@ -7,7 +7,6 @@ import "ROOT/libraries/math/SafeMathUint256.sol";
 import "ROOT/libraries/ContractExists.sol";
 import "ROOT/libraries/token/IERC20.sol";
 import "ROOT/external/IExchange.sol";
-import "ROOT/trading/IFillOrder.sol";
 import "ROOT/ICash.sol";
 import "ROOT/trading/Order.sol";
 import "ROOT/trading/IZeroXTrade.sol";
@@ -20,6 +19,7 @@ import 'ROOT/uniswap/interfaces/IUniswapV2Factory.sol';
 import 'ROOT/uniswap/interfaces/IUniswapV2Pair.sol';
 import 'ROOT/uniswap/interfaces/IWETH.sol';
 import 'ROOT/matic/IExitZeroXTrade.sol';
+import "ROOT/matic/IExitFillOrder.sol";
 
 
 contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155 {
@@ -31,7 +31,7 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
     // ERC20Token(address)
     bytes4 constant private ERC20_PROXY_ID = 0xf47261b0;
 
-    // ERC1155Assets(address,uint256[],uint256[],bytes)
+    // MultiAsset(uint256[],bytes[])
     bytes4 constant private MULTI_ASSET_PROXY_ID = 0x94cfcdd7;
 
     // ERC1155Assets(address,uint256[],uint256[],bytes)
@@ -84,9 +84,12 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
     bytes32 public EIP712_DOMAIN_HASH;
 
     address public maticZeroXTrade;
+    address public maticCash;
+    address public maticShareToken;
+
     IAugur public augur;
     IAugurTrading public augurTrading;
-    IFillOrder public fillOrder;
+    IExitFillOrder public fillOrder;
     ICash public cash;
     IShareToken public shareToken;
     IExchange public exchange;
@@ -94,7 +97,7 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
     IWETH public WETH;
     bool public token0IsCash;
 
-    function initialize(IAugur _augur, IAugurTrading _augurTrading) public beforeInitialized {
+    function initialize(IAugur _augur, IAugurTrading _augurTrading, IExitFillOrder _fillOrder) public beforeInitialized {
         endInitialization();
         augur = _augur;
         augurTrading = _augurTrading;
@@ -102,10 +105,10 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
         require(cash != ICash(0));
         shareToken = IShareToken(_augur.lookup("ShareToken"));
         require(shareToken != IShareToken(0));
-        exchange = IExchange(_augurTrading.lookup("ZeroXExchange"));
-        require(exchange != IExchange(0));
-        fillOrder = IFillOrder(_augurTrading.lookup("FillOrder"));
-        require(fillOrder != IFillOrder(0));
+
+        require(_fillOrder != IExitFillOrder(0));
+        fillOrder = _fillOrder;
+        
         WETH = IWETH(_augurTrading.lookup("WETH9"));
         IUniswapV2Factory _uniswapFactory = IUniswapV2Factory(_augur.lookup("UniswapV2Factory"));
         address _ethExchangeAddress = _uniswapFactory.getPair(address(WETH), address(cash));
@@ -126,8 +129,16 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
     }
 
     // TODO make a part of initialize
-    function initializeForMatic(address _maticZeroXTrade) public {
+    function initializeForMatic(
+        address _maticZeroXTrade, 
+        address _maticCash, 
+        address _maticShareToken, 
+        address _exchange
+    ) public {
+        exchange = IExchange(_exchange);
         maticZeroXTrade = _maticZeroXTrade;
+        maticCash = _maticCash;
+        maticShareToken = _maticShareToken;
     }
 
     // Dirty way to swap to exit tokens
@@ -274,7 +285,7 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
         payable
         returns (uint256)
     {
-        require(_orders.length > 0);
+        require(_orders.length > 0, "no orders");
 
         transferFromAllowed = true;
 
@@ -303,7 +314,7 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
                 continue;
             }
 
-            vars._amountTraded = doTrade(_order, totalFillResults.takerAssetFilledAmount, _fingerprint, _tradeGroupId, msg.sender);
+            vars._amountTraded = doTrade(_order, totalFillResults.takerAssetFilledAmount, _fingerprint, _tradeGroupId, _taker, _exitTokensPacked);
 
             vars._fillAmountRemaining = vars._fillAmountRemaining.sub(vars._amountTraded);
             _maxTrades -= 1;
@@ -335,6 +346,9 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
             assert(_returnData.length == 160);
             fillResults = abi.decode(_returnData, (IExchange.FillResults));
         }
+
+        require(_didSucceed, "_didSucceed");
+
         return fillResults;
     }
 
@@ -369,13 +383,13 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
     }
 
     function validateOrder(IExchange.Order memory _order, uint256 _fillAmountRemaining) internal view {
-        require(_order.takerAssetData.equals(encodeTakerAssetData()));
-        require(_order.takerAssetAmount == _order.makerAssetAmount);
+        require(_order.takerAssetData.equals(encodeTakerAssetData()), "test1");
+        require(_order.takerAssetAmount == _order.makerAssetAmount, "test2");
         (IERC1155 _zeroXTradeTokenMaker, uint256 _tokenIdMaker) = getZeroXTradeTokenData(_order.makerAssetData);
         (address _market, uint256 _price, uint8 _outcome, uint8 _type) = unpackTokenId(_tokenIdMaker);
         uint256 _numTicks = IMarket(_market).getNumTicks();
         require(isOrderAmountValid(IMarket(_market), _fillAmountRemaining), "Order must be a multiple of the market trade increment");
-        require(address(_zeroXTradeTokenMaker) == maticZeroXTrade);
+        require(address(_zeroXTradeTokenMaker) == maticZeroXTrade, "test3");
     }
 
     function isOrderAmountValid(IMarket _market, uint256 _orderAmount) public view returns (bool) {
@@ -407,7 +421,7 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
         return true;
     }
 
-    function doTrade(IExchange.Order memory _order, uint256 _amount, bytes32 _fingerprint, bytes32 _tradeGroupId, address _taker) private returns (uint256 _amountFilled) {
+    function doTrade(IExchange.Order memory _order, uint256 _amount, bytes32 _fingerprint, bytes32 _tradeGroupId, address _taker, bytes memory _exitTokensPacked) private returns (uint256 _amountFilled) {
         // parseOrderData will validate that the token being traded is the leigitmate one for the market
         AugurOrderData memory _augurOrderData = parseOrderData(_order);
         // If the signed order creator doesnt have enough funds we still want to continue and take their order out of the list
@@ -415,13 +429,30 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
         if (!creatorHasFundsForTrade(_order, _amount)) {
             return 0;
         }
+        
         // If the maker is also the taker we also just skip the trade but treat it as filled for amount remaining purposes
         if (_order.makerAddress == _taker) {
             return _amount;
         }
-        (uint256 _amountRemaining, uint256 _fees) = fillOrder.fillZeroXOrder(IMarket(_augurOrderData.marketAddress), _augurOrderData.outcome, _augurOrderData.price, Order.Types(_augurOrderData.orderType), _order.makerAddress, _amount, _fingerprint, _tradeGroupId, _taker);
+
+        (uint256 _amountRemaining, uint256 _fees) = fillOrder.fillZeroXOrder(
+            IExitFillOrder.FillZeroXOrderArguments({
+                _market: IMarket(_augurOrderData.marketAddress), 
+                _outcome: _augurOrderData.outcome, 
+                _price: _augurOrderData.price, 
+                _orderType: Order.Types(_augurOrderData.orderType), 
+                _creator: _order.makerAddress, 
+                _amount: _amount, 
+                _fingerprint: _fingerprint, 
+                _tradeGroupId: _tradeGroupId, 
+                _filler: _taker, 
+                _exitTokensPacked: _exitTokensPacked,
+                _exitShareToken: shareToken,
+                _exitCash: cash
+            })
+        );
         _amountFilled = _amount.sub(_amountRemaining);
-        logOrderFilled(_order, _augurOrderData, _taker, _tradeGroupId, _amountFilled, _fees);
+        // logOrderFilled(_order, _augurOrderData, _taker, _tradeGroupId, _amountFilled, _fees);
         return _amountFilled;
     }
 
@@ -458,7 +489,7 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
     /// @param _type Either BID == 0 or ASK == 1
     /// @return AssetProxy-compliant asset data describing the set of assets.
     function encodeAssetData(
-        IMarket _market,
+        address _market,
         uint256 _price,
         uint8 _outcome,
         uint8 _type
@@ -490,7 +521,7 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
     /// @param _type Either BID == 0 or ASK == 1
     /// @return AssetProxy-compliant asset data describing the set of assets.
     function encodeTradeAssetData(
-        IMarket _market,
+        address _market,
         uint256 _price,
         uint8 _outcome,
         uint8 _type
@@ -502,7 +533,7 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
         uint256[] memory _tokenIds = new uint256[](1);
         uint256[] memory _tokenValues = new uint256[](1);
 
-        uint256 _tokenId = getTokenId(address(_market), _price, _outcome, _type);
+        uint256 _tokenId = getTokenId(_market, _price, _outcome, _type);
         _tokenIds[0] = _tokenId;
         _tokenValues[0] = 1;
         bytes memory _callbackData = new bytes(0);
@@ -526,7 +557,7 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
     {
         _assetData = abi.encodeWithSelector(
             ERC20_PROXY_ID,
-            address(cash)
+            address(maticCash)
         );
 
         return _assetData;
@@ -544,7 +575,7 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
         bytes memory _callbackData = new bytes(0);
         _assetData = abi.encodeWithSelector(
             ERC1155_PROXY_ID,
-            address(shareToken),
+            address(maticShareToken),
             _tokenIds,
             _tokenValues,
             _callbackData
@@ -565,7 +596,7 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
         bytes memory _callbackData = new bytes(0);
         _assetData = abi.encodeWithSelector(
             ERC1155_PROXY_ID,
-            address(this),
+            address(maticZeroXTrade), // use matic zerox trade address
             _tokenIds,
             _tokenValues,
             _callbackData
@@ -630,12 +661,12 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
         
         // Validate storage refs against the decoded values.
         {
-            require(_amounts.length == 3);
-            require(_amounts[0] == 1);
-            require(_amounts[1] == 0);
-            require(_amounts[2] == 0);
-            require(_nestedAssetData[1].equals(encodeCashAssetData()));
-            require(_nestedAssetData[2].equals(encodeShareAssetData()));
+            require(_amounts.length == 3, "test4");
+            require(_amounts[0] == 1, "test5");
+            require(_amounts[1] == 0, "test5");
+            require(_amounts[2] == 0, "test6");
+            require(_nestedAssetData[1].equals(encodeCashAssetData()), "test7");
+            require(_nestedAssetData[2].equals(encodeShareAssetData()), "test8");
         }
 
         return decodeTradeAssetData(_nestedAssetData[0]);
@@ -715,16 +746,17 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
     }
 
     function createZeroXOrderFor(address _maker, uint8 _type, uint256 _attoshares, uint256 _price, address _market, uint8 _outcome, uint256 _expirationTimeSeconds, uint256 _salt) public view returns (IExchange.Order memory _zeroXOrder, bytes32 _orderHash) {
-        bytes memory _assetData = encodeAssetData(IMarket(_market), _price, _outcome, _type);
-        require(isOrderAmountValid(IMarket(_market), _attoshares), "Order must be a multiple of the market trade increment");
-        _zeroXOrder.makerAddress = _maker;
-        _zeroXOrder.makerAssetAmount = _attoshares;
-        _zeroXOrder.takerAssetAmount = _attoshares;
-        _zeroXOrder.expirationTimeSeconds = _expirationTimeSeconds;
-        _zeroXOrder.salt = _salt;
-        _zeroXOrder.makerAssetData = _assetData;
-        _zeroXOrder.takerAssetData = encodeTakerAssetData();
-        _orderHash = exchange.getOrderInfo(_zeroXOrder).orderHash;
+        // bytes memory _assetData = encodeAssetData(IMarket(_market), _price, _outcome, _type);
+        // require(isOrderAmountValid(IMarket(_market), _attoshares), "Order must be a multiple of the market trade increment");
+        // _zeroXOrder.makerAddress = _maker;
+        // _zeroXOrder.makerAssetAmount = _attoshares;
+        // _zeroXOrder.takerAssetAmount = _attoshares;
+        // _zeroXOrder.expirationTimeSeconds = _expirationTimeSeconds;
+        // _zeroXOrder.salt = _salt;
+        // _zeroXOrder.makerAssetData = _assetData;
+        // _zeroXOrder.takerAssetData = encodeTakerAssetData();
+        // _orderHash = exchange.getOrderInfo(_zeroXOrder).orderHash;
+        revert();
     }
 
     function encodeEIP1271OrderWithHash(

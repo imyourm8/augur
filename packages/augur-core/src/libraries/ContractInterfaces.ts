@@ -95,6 +95,8 @@ export class ExitCash extends c.ExitCash<BigNumber> {
 }
 export class ExitCashFactory extends c.ExitCashFactory<BigNumber> {
 }
+export class ExitFillOrder extends c.ExitFillOrder<BigNumber> {
+}
 export class ExitShareToken extends c.ExitShareToken<BigNumber> {
 }
 export class ExitShareTokenFactory extends c.ExitShareTokenFactory<BigNumber> {

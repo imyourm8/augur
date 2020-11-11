@@ -1,6 +1,5 @@
 pragma solidity 0.5.15;
 
-import 'ROOT/reporting/IShareToken.sol';
 import 'ROOT/libraries/token/ERC1155.sol';
 import 'ROOT/libraries/ReentrancyGuard.sol';
 import 'ROOT/libraries/ITyped.sol';
@@ -9,13 +8,13 @@ import 'ROOT/reporting/IMarket.sol';
 import 'ROOT/IAugur.sol';
 import 'ROOT/libraries/TokenId.sol';
 import 'ROOT/matic/ExecutorAcl.sol';
+import 'ROOT/matic/IExitShareToken.sol';
 
 /**
  * @title Share Token
  * @notice ERC1155 contract to hold all Augur share token balances
  */
-contract ExitShareToken is ITyped, Initializable, ERC1155, IShareToken, ReentrancyGuard, ExecutorAcl {
-
+contract ExitShareToken is ITyped, Initializable, ERC1155, IExitShareToken, ReentrancyGuard, ExecutorAcl {
     string constant public name = "Shares";
     string constant public symbol = "SHARE";
 
@@ -39,9 +38,9 @@ contract ExitShareToken is ITyped, Initializable, ERC1155, IShareToken, Reentran
 
     function initializeFromPredicate(IAugur _augur, address _cash) external {
         // call to initialize() will ensure beforeInitialized validation
-        initialize(_augur);
+        require(_augurPredicate == address(0) && _cash != address(0));
+        // initialize(_augur);
         cash = ICash(_cash);
-        require(cash != ICash(0));
         _augurPredicate = msg.sender;
     }
 
@@ -55,7 +54,7 @@ contract ExitShareToken is ITyped, Initializable, ERC1155, IShareToken, Reentran
         @param _value Transfer amount
     */
     function unsafeTransferFrom(address _from, address _to, uint256 _id, uint256 _value) public isExecuting {
-        _transferFrom(_from, _to, _id, _value, bytes(""), false);
+        _internalTransferFrom(_from, _to, _id, _value, bytes(""), false);
     }
 
     /**
@@ -233,8 +232,8 @@ contract ExitShareToken is ITyped, Initializable, ERC1155, IShareToken, Reentran
      * @return (uint256 _creatorFee, uint256 _reportingFee) The fees taken for the market creator and reporting respectively
      */
     function sellCompleteSetsForTrade(IMarket _market, uint256 _outcome, uint256 _amount, address _shortParticipant, address _longParticipant, address _shortRecipient, address _longRecipient, uint256 _price, address _sourceAccount, bytes32 _fingerprint) external isExecuting returns (uint256 _creatorFee, uint256 _reportingFee) {
-        require(isApprovedForAll(_shortParticipant, msg.sender) == true, "ERC1155: need operator approval to burn short account shares");
-        require(isApprovedForAll(_longParticipant, msg.sender) == true, "ERC1155: need operator approval to burn long account shares");
+        // require(isApprovedForAll(_shortParticipant, msg.sender) == true, "ERC1155: need operator approval to burn short account shares");
+        // require(isApprovedForAll(_longParticipant, msg.sender) == true, "ERC1155: need operator approval to burn long account shares");
 
         _internalTransferFrom(_shortParticipant, _longParticipant, getTokenId(_market, _outcome), _amount, bytes(""), false);
 
@@ -247,7 +246,7 @@ contract ExitShareToken is ITyped, Initializable, ERC1155, IShareToken, Reentran
             require(cash.transfer(_shortRecipient, _payout.sub(_longPayout)));
         }
 
-        assertBalances(_market);
+        // assertBalances(_market);
         return (_creatorFee, _reportingFee);
     }
 
@@ -449,18 +448,18 @@ contract ExitShareToken is ITyped, Initializable, ERC1155, IShareToken, Reentran
 
     function onTokenTransfer(uint256 _tokenId, address _from, address _to, uint256 _value) internal {
         (address _marketAddress, uint256 _outcome) = TokenId.unpackTokenId(_tokenId);
-        augur.logShareTokensBalanceChanged(_from, IMarket(_marketAddress), _outcome, balanceOf(_from, _tokenId));
-        augur.logShareTokensBalanceChanged(_to, IMarket(_marketAddress), _outcome, balanceOf(_to, _tokenId));
+        // augur.logShareTokensBalanceChanged(_from, IMarket(_marketAddress), _outcome, balanceOf(_from, _tokenId));
+        // augur.logShareTokensBalanceChanged(_to, IMarket(_marketAddress), _outcome, balanceOf(_to, _tokenId));
     }
 
     function onMint(uint256 _tokenId, address _target, uint256 _amount) internal {
         (address _marketAddress, uint256 _outcome) = TokenId.unpackTokenId(_tokenId);
-        augur.logShareTokensBalanceChanged(_target, IMarket(_marketAddress), _outcome, balanceOf(_target, _tokenId));
+        // augur.logShareTokensBalanceChanged(_target, IMarket(_marketAddress), _outcome, balanceOf(_target, _tokenId));
     }
 
     function onBurn(uint256 _tokenId, address _target, uint256 _amount) internal {
         (address _marketAddress, uint256 _outcome) = TokenId.unpackTokenId(_tokenId);
-        augur.logShareTokensBalanceChanged(_target, IMarket(_marketAddress), _outcome, balanceOf(_target, _tokenId));
+        // augur.logShareTokensBalanceChanged(_target, IMarket(_marketAddress), _outcome, balanceOf(_target, _tokenId));
     }
 
     function mint(address to, IMarket market, uint256 outcome, uint256 balance) external isExecuting {

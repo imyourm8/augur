@@ -1,8 +1,8 @@
 pragma solidity 0.5.15;
 pragma experimental ABIEncoderV2;
 
-import { IMarket } from "ROOT/reporting/IMarket.sol";
-import { AugurPredicate } from "ROOT/matic/AugurPredicate.sol";
+import "ROOT/reporting/IMarket.sol";
+import "ROOT/matic/AugurPredicate.sol";
 
 contract AugurPredicateTest is AugurPredicate {
     function claimShareBalanceFaucet(address to, address market, uint256 outcome, uint256 balance) external {
@@ -11,10 +11,10 @@ contract AugurPredicateTest is AugurPredicate {
             address(lookupExit[exitId].exitShareToken) != address(0x0),
             "Predicate.claimBalanceFaucet: Please call initializeForExit first"
         );
-        address _rootMarket = _checkAndAddMaticMarket(exitId, market);
+        _addMarketToExit(exitId, market);
         lookupExit[exitId].exitPriority = now; // dummy
         setIsExecuting(exitId, true);
-        // lookupExit[exitId].exitShareToken.mint(to, _rootMarket, outcome, balance);
+        lookupExit[exitId].exitShareToken.mint(to, IMarket(market), outcome, balance);
         setIsExecuting(exitId, false);
     }
 
@@ -40,6 +40,10 @@ contract AugurPredicateTest is AugurPredicate {
     }
 
     function processExitForFinalizedMarketTest(IMarket market, address exitor, uint256 exitId) public {
-        processExitForFinalizedMarket(market, exitor, exitId);
+        augurShareToken.claimTradingProceeds(
+            market,
+            exitor,
+            hex"00"
+        );
     }
 }

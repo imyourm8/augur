@@ -40,10 +40,11 @@ import {
     WETH9,
     TestNetReputationToken,
     UniswapV2Router02,
-    AugurPredicate
+    AugurPredicate,
+    ExitFillOrder
 } from './ContractInterfaces';
 import { Contracts, ContractData } from './Contracts';
-import { Dependencies } from './GenericContractInterfaces';
+import { Dependencies, ExitZeroXTrade } from './GenericContractInterfaces';
 import { NetworkId } from '@augurproject/utils';
 import { ContractAddresses, SDKConfiguration, mergeConfig } from '@augurproject/utils';
 import { updateConfig } from '@augurproject/artifacts';
@@ -63,7 +64,8 @@ const IGNORE_ADDR_MAPPING = [
     'IInitialReporter', 
     'TradingCash',
     'FeePotPredicate',
-    'AugurRegistry'
+    'AugurRegistry',
+    'ExitExchange'
 ]
 
 const NULL_ADDRESS = '0x0000000000000000000000000000000000000000';
@@ -615,6 +617,7 @@ Deploying to: ${env}
           'ERC1155Proxy',
           'MultiAssetProxy',
           'Exchange',
+          'ExitExchange',
           'Coordinator',
           'CoordinatorRegistry',
           'ChaiBridge',
@@ -667,6 +670,18 @@ Deploying to: ${env}
         console.log('Initializing contracts...');
 
         const readiedPromises = [
+            async () => {
+                const exitZeroXTrade = new ExitZeroXTrade(this.dependencies, await this.getContractAddress('ExitZeroXTrade'));
+                console.log('Initializing ExitZeroXTrade contract');
+                await exitZeroXTrade.initialize(this.augur!.address, this.augurTrading!.address, await this.getContractAddress('ExitFillOrder'));
+                console.log('Initialized ExitZeroXTrade contract');
+            },
+            async () => {
+                const exitFillOrder = new ExitFillOrder(this.dependencies, await this.getContractAddress('ExitFillOrder'));
+                console.log('Initializing ExitFillOrder contract');
+                await exitFillOrder.initialize(this.augur!.address, this.augurTrading!.address, await this.getContractAddress('ExitZeroXTrade'));
+                console.log('Initialized ExitFillOrder contract');
+            },
             async () => {
                 const augurPredicateContract = await this.getContractAddress('AugurPredicateTest');
                 const augurPredicate = new AugurPredicate(this.dependencies, augurPredicateContract);

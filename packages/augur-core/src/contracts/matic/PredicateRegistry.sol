@@ -31,20 +31,12 @@ contract PredicateRegistry is Ownable {
     address public cash;
     address public shareToken;
 
-    // predicate contracts
-    address public rootZeroXTrade;
-
-
     function mapMarket(address childMarket, address rootMarket, uint256 numOutcomes, uint256 numTicks) public onlyOwner {
         childToRootMarket[childMarket] = Market(rootMarket, numOutcomes, numTicks);
     }
 
     function setZeroXTrade(address _zeroXTrade) public onlyOwner{
         zeroXTrade = _zeroXTrade;
-    }
-
-    function setRootZeroXTrade(address _zeroXTrade) public onlyOwner {
-        rootZeroXTrade = _zeroXTrade;
     }
 
     function setZeroXExchange(address childExchange, address rootExchange, bool isDefaultExchange) public onlyOwner {

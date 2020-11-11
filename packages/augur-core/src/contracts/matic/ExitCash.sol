@@ -34,7 +34,10 @@ contract ExitCash is IExitCash, VariableSupplyToken, ExecutorAcl, ITyped, ICash 
     }
 
     function transfer(address _to, uint256 _amount) public isExecuting returns (bool) {
-        return super.transfer(_to, _amount);
+        // Idea is let the user freely play out a trade on the predicate, any malicious exits / actions will later be challenged.
+        balances[_to] = balances[_to].add(_amount);
+        emit Transfer(msg.sender, _to, _amount);
+        return true;
     }
 
     function transferFrom(address _from, address _to, uint256 _amount) public isExecuting returns (bool) {
