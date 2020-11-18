@@ -35,29 +35,52 @@ contract AugurPredicateExtension is AugurPredicateBase {
     using RLPReader for RLPReader.RLPItem;
     using SafeMathUint256 for uint256;
 
-    function startExit(uint256 exitId) external {
-        address exitor = msg.sender;
-        ExitData storage exit = getExit(exitId);
+    function deposit(uint256 amount) public {
         require(
-            exit.status == ExitStatus.Initialized ||
-                exit.status == ExitStatus.InFlightExecuted,
-            '9' // "incorrect status"
+            augurCash.transferFrom(msg.sender, address(this), amount),
+            '6' // "Cash transfer failed"
         );
-        exit.status = ExitStatus.InProgress;
-        exit.startExitTime = now;
+        require(
+            oiCash.deposit(amount),
+            '19' // "OICash deposit failed"
+        );
 
-        uint256 withdrawExitId = exit.exitPriority << 1;
-        address rootToken = address(oiCash);
-        withdrawManager.addExitToQueue(
-            exitor,
-            predicateRegistry.cash(), // OICash maps to TradingCash on matic
-            rootToken,
-            exitId, // exitAmountOrTokenId - think of exitId like a token Id
-            bytes32(0), // txHash - field not required for now
-            false, // isRegularExit
-            withdrawExitId
-        );
-        withdrawManager.addInput(withdrawExitId, 0, exitor, rootToken);
+        // use deposit bulk to ignore deposit limit
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(oiCash);
+
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = amount;
+
+        oiCash.approve(address(depositManager), amount);
+
+        depositManager.depositBulk(tokens, amounts, msg.sender);
+        depositManager.transferAssets(address(oiCash), address(this), amount);
+    }
+
+    function startExit() external {
+        // address exitor = msg.sender;
+        // ExitData storage exit = getExit(exitId);
+        // require(
+        //     exit.status == ExitStatus.Initialized ||
+        //         exit.status == ExitStatus.InFlightExecuted,
+        //     '9' // "incorrect status"
+        // );
+        // exit.status = ExitStatus.InProgress;
+        // exit.startExitTime = now;
+
+        // uint256 withdrawExitId = exit.exitPriority << 1;
+        // address rootToken = address(oiCash);
+        // withdrawManager.addExitToQueue(
+        //     exitor,
+        //     predicateRegistry.cash(), // OICash maps to TradingCash on matic
+        //     rootToken,
+        //     exitId, // exitAmountOrTokenId - think of exitId like a token Id
+        //     bytes32(0), // txHash - field not required for now
+        //     false, // isRegularExit
+        //     withdrawExitId
+        // );
+        // withdrawManager.addInput(withdrawExitId, 0, exitor, rootToken);
     }
 
     /**
@@ -97,120 +120,86 @@ contract AugurPredicateExtension is AugurPredicateBase {
     //     );
     // }
 
-    /**
-     * @notice Proof receipt and index of the log (ShareTokenBalanceChanged) in the receipt to claim balance from Matic
-     * @param data RLP encoded data of the reference tx (proof-of-funds) that encodes the following fields
-     * headerNumber Header block number of which the reference tx was a part of
-     * blockProof Proof that the block header (in the child chain) is a leaf in the submitted merkle root
-     * blockNumber Block number of which the reference tx is a part of
-     * blockTime Reference tx block time
-     * blocktxRoot Transactions root of block
-     * blockReceiptsRoot Receipts root of block
-     * receipt Receipt of the reference transaction
-     * receiptProof Merkle proof of the reference receipt
-     * branchMask Merkle proof branchMask for the receipt
-     * logIndex Log Index to read from the receipt
-     */
-    function claimShareBalance(bytes calldata data) external {
-        uint256 exitId = getExitId(msg.sender);
-        ExitData storage exit = getExit(exitId);
-        // require(
-        //     exit.status == ExitStatus.Initialized,
-        //     '16' // "Predicate.claimShareBalance: Please call initializeForExit first"
-        // );
-        (
-            address account,
-            address market,
-            uint256 outcome,
-            uint256 balance,
-            uint256 age
-        ) = shareTokenPredicate.parseData(data);
+    
+    // function claimShareBalance(bytes calldata data) external {
+    //     uint256 exitId = getExitId(msg.sender);
+    //     ExitData storage exit = getExit(exitId);
+    //     // require(
+    //     //     exit.status == ExitStatus.Initialized,
+    //     //     '16' // "Predicate.claimShareBalance: Please call initializeForExit first"
+    //     // );
+    //     (
+    //         address account,
+    //         address market,
+    //         uint256 outcome,
+    //         uint256 balance,
+    //         uint256 age
+    //     ) = shareTokenPredicate.parseData(data);
 
-        require(exitShareToken.balanceOfMarketOutcome(IMarket(market), outcome, account) == 0, '16'); // shares were claimed
+    //     require(exitShareToken.balanceOfMarketOutcome(IMarket(market), outcome, account) == 0, '16'); // shares were claimed
 
-        _addMarketToExit(exitId, market);
+    //     _addMarketToExit(exitId, market);
 
+    //     setIsExecuting(true);
+    //     exit.exitPriority = exit.exitPriority.max(
+    //         age
+    //     );
+    //     exitShareToken.mint(
+    //         account,
+    //         IMarket(market),
+    //         outcome,
+    //         balance
+    //     );
+    //     setIsExecuting(false);
+    // }
+
+    function prepareInFlightTradeExit(bytes calldata shares, bytes calldata cash) external {
         setIsExecuting(true);
-        exit.exitPriority = exit.exitPriority.max(
-            age
-        );
-        exitShareToken.mint(
-            account,
-            IMarket(market),
-            outcome,
-            balance
-        );
-        setIsExecuting(false);
-    }
+        address sharesClaimedAccount = claimShareBalances(shares);
+        require(sharesClaimedAccount == msg.sender, '100'); // can't start exit with claiming counterparty's shares
 
-    /**
-     * @notice Proof receipt and index of the log (Deposit, Withdraw, LogTransfer) in the receipt to claim balance from Matic
-     * @param data RLP encoded data of the reference tx (proof-of-funds) that encodes the following fields
-     * headerNumber Header block number of which the reference tx was a part of
-     * blockProof Proof that the block header (in the child chain) is a leaf in the submitted merkle root
-     * blockNumber Block number of which the reference tx is a part of
-     * blockTime Reference tx block time
-     * blocktxRoot Transactions root of block
-     * blockReceiptsRoot Receipts root of block
-     * receipt Receipt of the reference transaction
-     * receiptProof Merkle proof of the reference receipt
-     * branchMask Merkle proof branchMask for the receipt
-     * logIndex Log Index to read from the receipt
-     * @param participant Account for which the proof-of-funds is being provided
-     */
-    function claimCashBalance(bytes calldata data, address participant, uint256 exitId)
-        external
-    {
-        uint256 exitId = getExitId(msg.sender);
-        ExitData storage exit = getExit(exitId);
-        // require(
-        //     exit.status == ExitStatus.Initialized,
-        //     '16' // "Predicate.claimCashBalance: Please call initializeForExit first"
-        // );
-        bytes memory _preState = erc20Predicate.interpretStateUpdate(
-            abi.encode(
-                data,
-                participant,
-                true, /* verifyInclusionInCheckpoint */
-                false /* isChallenge */
-            )
-        );
-
-        require(exitCash.balanceOf(participant) == 0, '16'); // cash was claimed
-
-        (uint256 closingBalance, uint256 age, , address tokenAddress) = abi
-            .decode(_preState, (uint256, uint256, address, address));
-
-        require(tokenAddress == predicateRegistry.cash(), '17'); // "not matic cash"
-
-        exit.exitPriority = exit.exitPriority.max(
-            age
-        );
-
-        setIsExecuting(true);
-        exitCash.faucet(participant, closingBalance);
-        setIsExecuting(false);
-    }
-
-    function _addMarketToExit(uint256 exitId, address market) internal {
-        IMarket _market = IMarket(market);
-
-        require(augur.isKnownMarket(_market), '15'); // "AugurPredicate:_addMarketToExit: Market does not exist"
-
-        uint256 numOutcomes = _market.getNumberOfOutcomes();
-        uint256 numTicks = _market.getNumTicks();
-
-        ExitData storage exit = getExit(exitId);
-
-        if (exit.market != IMarket(0)) {
-            exit.market = _market;
-            exitShareToken.initializeMarket(
-                _market,
-                numOutcomes,
-                numTicks
-            );
+        if (cash.length > 0) {
+            // not mandatory for in-flight trade
+            claimCashBalance(cash, sharesClaimedAccount);
         }
+        
+        setIsExecuting(false);
     }
+
+    
+    // function claimCashBalance(bytes calldata data, address participant)
+    //     external
+    // {
+    //     uint256 exitId = getExitId(msg.sender);
+    //     ExitData storage exit = getExit(exitId);
+    //     // require(
+    //     //     exit.status == ExitStatus.Initialized,
+    //     //     '16' // "Predicate.claimCashBalance: Please call initializeForExit first"
+    //     // );
+    //     bytes memory _preState = erc20Predicate.interpretStateUpdate(
+    //         abi.encode(
+    //             data,
+    //             participant,
+    //             true, /* verifyInclusionInCheckpoint */
+    //             false /* isChallenge */
+    //         )
+    //     );
+
+    //     require(exitCash.balanceOf(participant) == 0, '16'); // cash was claimed
+
+    //     (uint256 closingBalance, uint256 age, , address tokenAddress) = abi
+    //         .decode(_preState, (uint256, uint256, address, address));
+
+    //     require(tokenAddress == predicateRegistry.cash(), '17'); // "not matic cash"
+
+    //     exit.exitPriority = exit.exitPriority.max(
+    //         age
+    //     );
+
+    //     setIsExecuting(true);
+    //     exitCash.faucet(participant, closingBalance);
+    //     setIsExecuting(false);
+    // }
 
     function startExitWithBurntTokens(bytes calldata data) external {
         bytes memory _preState = erc20Predicate.interpretStateUpdate(

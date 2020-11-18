@@ -32,9 +32,8 @@ contract ShareTokenPredicate is Initializable {
 
     function initialize(
         PredicateRegistry _predicateRegistry,
-        IWithdrawManager _withdrawManager
-    ) public // IErc20Predicate _erc20Predicate
-    {
+        IWithdrawManager _withdrawManager // IErc20Predicate _erc20Predicate
+    ) public {
         endInitialization();
         predicateRegistry = _predicateRegistry;
         withdrawManager = _withdrawManager;
@@ -59,37 +58,48 @@ contract ShareTokenPredicate is Initializable {
         external
         view
         returns (
-            address account,
-            address market,
-            uint256 outcome,
-            uint256 balance,
-            uint256 age
+            address[] memory accounts,
+            address[] memory markets,
+            uint256[] memory outcomes,
+            uint256[] memory balances,
+            uint256[] memory ages
         )
     {
         RLPReader.RLPItem[] memory referenceTxData = data.toRlpItem().toList();
         bytes memory receipt = referenceTxData[6].toBytes();
         RLPReader.RLPItem[] memory inputItems = receipt.toRlpItem().toList();
-        uint256 logIndex = referenceTxData[9].toUint();
-        require(logIndex < MAX_LOGS, 'Supporting a max of 100 logs');
-        age = withdrawManager.verifyInclusion(
-            data,
-            0, /* offset */
-            false /* verifyTxInclusion */
-        );
-        inputItems = inputItems[3].toList()[logIndex].toList(); // select log based on given logIndex
-        bytes memory logData = inputItems[2].toBytes();
-        inputItems = inputItems[1].toList(); // topics
-        // now, inputItems[i] refers to i-th (0-based) topic in the topics array
-        require(
-            bytes32(inputItems[0].toUint()) ==
-                SHARE_TOKEN_BALANCE_CHANGED_EVENT_SIG,
-            'ShareTokenPredicate.parseData: Not ShareTokenBalanceChanged event signature'
-        );
-        // inputItems[1] is the universe
-        account = address(inputItems[2].toUint());
-        market = address(inputItems[3].toUint());
-        outcome = BytesLib.toUint(logData, 0);
-        balance = BytesLib.toUint(logData, 32);
+
+        uint256 totalLogs = referenceTxData.length - 9;
+        accounts = new address[](totalLogs);
+        markets = new address[](totalLogs);
+        outcomes = new uint256[](totalLogs);
+        balances = new uint256[](totalLogs);
+        ages = new uint256[](totalLogs);
+
+        for (uint256 i = 9; i < referenceTxData.length; i++) {
+            uint256 logIndex = referenceTxData[9].toUint();
+            require(logIndex < MAX_LOGS, 'Supporting a max of 100 logs');
+            ages[i - 9] = withdrawManager.verifyInclusion(
+                data,
+                0, /* offset */
+                false /* verifyTxInclusion */
+            );
+            inputItems = inputItems[3].toList()[logIndex].toList(); // select log based on given logIndex
+
+            bytes memory logData = inputItems[2].toBytes();
+            inputItems = inputItems[1].toList(); // topics
+            // now, inputItems[i] refers to i-th (0-based) topic in the topics array
+            require(
+                bytes32(inputItems[0].toUint()) ==
+                    SHARE_TOKEN_BALANCE_CHANGED_EVENT_SIG,
+                'ShareTokenPredicate.parseData: Not ShareTokenBalanceChanged event signature'
+            );
+            // inputItems[1] is the universe
+            accounts[i - 9] = address(inputItems[2].toUint());
+            markets[i - 9] = address(inputItems[3].toUint());
+            outcomes[i - 9] = BytesLib.toUint(logData, 0);
+            balances[i - 9] = BytesLib.toUint(logData, 32);
+        }
     }
 
     function executeInFlightTransaction(

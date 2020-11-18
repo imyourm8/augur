@@ -5,13 +5,11 @@ contract AugurPredicateSpec {
 
     function startExit(uint256 exitId) external {}
 
-    function claimShareBalance(bytes calldata data) external {}
-
-    function claimCashBalance(
-        bytes calldata data,
-        address participant,
-        uint256 exitId
-    ) external {}
-
     function startExitWithBurntTokens(bytes calldata data) external {}
+
+    function deposit(uint256 amount) public {}
+
+    function startExit() external {}
+
+    function prepareInFlightTradeExit(bytes calldata shares, bytes calldata cash) external {}
 }

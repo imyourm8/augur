@@ -134,36 +134,48 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
         require(rootFeePot.depositFees(payout));
     }
 
-    function deposit(uint256 amount) public {
-        require(
-            augurCash.transferFrom(msg.sender, address(this), amount),
-            '6' // "Cash transfer failed"
-        );
-        require(
-            oiCash.deposit(amount),
-            '19' // "OICash deposit failed"
-        );
+    // function startInFlightTradeExit(
+    //     bytes calldata counterPartyShares,
+    //     bytes calldata counterPartyCash,
+    //     bytes calldata tradeData
+    // ) external {
+    //     uint256 exitId = getExitId(msg.sender);
+    //     ExitData storage exit = getExit(exitId);
+    //     // require(
+    //     //     exit.status == ExitStatus.Initialized,
+    //     //     '16' // "Predicate.claimShareBalance: Please call initializeForExit first"
+    //     // );
+    //     (
+    //         address account,
+    //         address market,
+    //         uint256 outcome,
+    //         uint256 balance,
+    //         uint256 age
+    //     ) = shareTokenPredicate.parseData(data);
 
-        // use deposit bulk to ignore deposit limit
-        address[] memory tokens = new address[](1);
-        tokens[0] = address(oiCash);
+    //     require(exitShareToken.balanceOfMarketOutcome(IMarket(market), outcome, account) == 0, '16'); // shares were claimed
 
-        uint256[] memory amounts = new uint256[](1);
-        amounts[0] = amount;
-
-        oiCash.approve(address(depositManager), amount);
-
-        depositManager.depositBulk(tokens, amounts, msg.sender);
-        depositManager.transferAssets(address(oiCash), address(this), amount);
-    }
+    //     _addMarketToExit(exitId, market);
+        
+    //     exit.exitPriority = exit.exitPriority.max(
+    //         age
+    //     );
+    //     exitShareToken.mint(
+    //         account,
+    //         IMarket(market),
+    //         outcome,
+    //         balance
+    //     );
+    //     setIsExecuting(false);
+    // }
 
     function executeInFlightTransaction(bytes memory data) public payable {
         uint256 exitId = getExitId(msg.sender);
         ExitData storage exit = getExit(exitId);
-        require(
-            exit.status == ExitStatus.Initialized,
-            '14' // "executeInFlightTransaction: Exit should be in Initialized state"
-        );
+        // require(
+        //     exit.status == ExitStatus.Initialized,
+        //     '14' // "executeInFlightTransaction: Exit should be in Initialized state"
+        // );
         exit.status = ExitStatus.InFlightExecuted; // this ensures only 1 in-flight tx can be replayed on-chain
 
         RLPReader.RLPItem[] memory targetTx = ProofReader.convertToTx(data);
