@@ -3,7 +3,6 @@ pragma solidity 0.5.15;
 import 'ROOT/libraries/token/ERC1155.sol';
 import 'ROOT/libraries/ReentrancyGuard.sol';
 import 'ROOT/libraries/ITyped.sol';
-import 'ROOT/libraries/Initializable.sol';
 import 'ROOT/reporting/IMarket.sol';
 import 'ROOT/IAugur.sol';
 import 'ROOT/libraries/TokenId.sol';
@@ -14,7 +13,7 @@ import 'ROOT/matic/IExitShareToken.sol';
  * @title Share Token
  * @notice ERC1155 contract to hold all Augur share token balances
  */
-contract ExitShareToken is ITyped, Initializable, ERC1155, IExitShareToken, ReentrancyGuard, ExecutorAcl {
+contract ExitShareToken is ITyped, ERC1155, IExitShareToken, ReentrancyGuard, ExecutorAcl {
     string constant public name = "Shares";
     string constant public symbol = "SHARE";
 
@@ -28,20 +27,11 @@ contract ExitShareToken is ITyped, Initializable, ERC1155, IExitShareToken, Reen
     IAugur public augur;
     ICash public cash;
 
-    function initialize(IAugur _augur) public beforeInitialized {
+    function initialize(IAugur _augur, address _cash, address _augurPredicate) public beforeInitialized {
         endInitialization();
         augur = _augur;
-        // cash = ICash(_augur.lookup("Cash"));
-
-        // require(cash != ICash(0));
-    }
-
-    function initializeFromPredicate(IAugur _augur, address _cash) external {
-        // call to initialize() will ensure beforeInitialized validation
-        require(_augurPredicate == address(0) && _cash != address(0));
-        // initialize(_augur);
         cash = ICash(_cash);
-        _augurPredicate = msg.sender;
+        augurPredicate = _augurPredicate;
     }
 
     /**

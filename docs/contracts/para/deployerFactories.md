@@ -4469,7 +4469,7 @@ a contract or not this will not call `onERC1155Received` on `to`
 
 
 
-<div class="contract-index"><span class="contract-index-title">Functions</span><ul><li><a href="#IExchange.protocolFeeMultiplier()"><code class="function-signature">protocolFeeMultiplier()</code></a></li><li><a href="#IExchange.getOrderInfo(struct IExchange.Order)"><code class="function-signature">getOrderInfo(struct IExchange.Order order)</code></a></li><li><a href="#IExchange.fillOrder(struct IExchange.Order,uint256,bytes)"><code class="function-signature">fillOrder(struct IExchange.Order order, uint256 takerAssetFillAmount, bytes signature)</code></a></li></ul></div>
+<div class="contract-index"><span class="contract-index-title">Functions</span><ul><li><a href="#IExchange.protocolFeeMultiplier()"><code class="function-signature">protocolFeeMultiplier()</code></a></li><li><a href="#IExchange.getOrderInfo(struct IExchange.Order)"><code class="function-signature">getOrderInfo(struct IExchange.Order order)</code></a></li><li><a href="#IExchange.fillOrder(struct IExchange.Order,uint256,bytes)"><code class="function-signature">fillOrder(struct IExchange.Order order, uint256 takerAssetFillAmount, bytes signature)</code></a></li><li><a href="#IExchange.isValidSignature(struct IExchange.Order,bytes32,bytes)"><code class="function-signature">isValidSignature(struct IExchange.Order order, bytes32 orderHash, bytes signature)</code></a></li></ul></div>
 
 
 
@@ -4495,6 +4495,12 @@ Fills the input order.
  @param takerAssetFillAmount Desired amount of takerAsset to sell.
  @param signature Proof that order has been created by maker.
  @return Amounts filled and fees paid by maker and taker.
+
+
+
+<h4><a class="anchor" aria-hidden="true" id="IExchange.isValidSignature(struct IExchange.Order,bytes32,bytes)"></a><code class="function-signature">isValidSignature(struct IExchange.Order order, bytes32 orderHash, bytes signature) <span class="return-arrow">→</span> <span class="return-type">bool</span></code><span class="function-visibility">public</span></h4>
+
+
 
 
 

@@ -97,14 +97,22 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
     IWETH public WETH;
     bool public token0IsCash;
 
-    function initialize(IAugur _augur, IAugurTrading _augurTrading, IExitFillOrder _fillOrder) public beforeInitialized {
+    function initialize(
+        IAugur _augur, 
+        IAugurTrading _augurTrading, 
+        IExitFillOrder _fillOrder, 
+        address _exitCash, 
+        address _exitShareToken
+    ) public beforeInitialized {
         endInitialization();
+        require(_exitCash != address(0));
+        require(_exitShareToken != address(0));
+
         augur = _augur;
         augurTrading = _augurTrading;
-        cash = ICash(_augur.lookup("Cash"));
-        require(cash != ICash(0));
-        shareToken = IShareToken(_augur.lookup("ShareToken"));
-        require(shareToken != IShareToken(0));
+        cash = ICash(_exitCash);
+        shareToken = IShareToken(_exitShareToken);
+        
 
         require(_fillOrder != IExitFillOrder(0));
         fillOrder = _fillOrder;
@@ -140,13 +148,6 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
         maticCash = _maticCash;
         maticShareToken = _maticShareToken;
     }
-
-    // Dirty way to swap to exit tokens
-    function updateTokens(bytes memory _exitTokenPacked) internal {
-        (address _shareToken, address _cash) = abi.decode(_exitTokenPacked, (address, address));
-        shareToken = IShareToken(_shareToken);
-        cash = ICash(_cash);
-    } 
 
     function getExchange() external view returns(IExchange) {
         return exchange;
@@ -278,8 +279,7 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
         uint256 _maxTrades,
         IExchange.Order[] memory _orders,
         bytes[] memory _signatures,
-        address _taker,
-        bytes memory _exitTokensPacked
+        address _taker
     )
         public
         payable
@@ -295,8 +295,6 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
         vars._protocolFee = exchange.protocolFeeMultiplier().mul(tx.gasprice);
         coverProtocolFee(vars._protocolFee.mul(_maxTrades), _maxProtocolFeeDai);
         
-        updateTokens(_exitTokensPacked);
-
         // Do the actual asset exchanges
         for (uint256 i = 0; i < _orders.length && vars._fillAmountRemaining != 0; i++) {
             IExchange.Order memory _order = _orders[i];
@@ -314,7 +312,7 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
                 continue;
             }
 
-            vars._amountTraded = doTrade(_order, totalFillResults.takerAssetFilledAmount, _fingerprint, _tradeGroupId, _taker, _exitTokensPacked);
+            vars._amountTraded = doTrade(_order, totalFillResults.takerAssetFilledAmount, _fingerprint, _tradeGroupId, _taker);
 
             vars._fillAmountRemaining = vars._fillAmountRemaining.sub(vars._amountTraded);
             _maxTrades -= 1;
@@ -421,7 +419,7 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
         return true;
     }
 
-    function doTrade(IExchange.Order memory _order, uint256 _amount, bytes32 _fingerprint, bytes32 _tradeGroupId, address _taker, bytes memory _exitTokensPacked) private returns (uint256 _amountFilled) {
+    function doTrade(IExchange.Order memory _order, uint256 _amount, bytes32 _fingerprint, bytes32 _tradeGroupId, address _taker) private returns (uint256 _amountFilled) {
         // parseOrderData will validate that the token being traded is the leigitmate one for the market
         AugurOrderData memory _augurOrderData = parseOrderData(_order);
         // If the signed order creator doesnt have enough funds we still want to continue and take their order out of the list
@@ -445,10 +443,7 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
                 _amount: _amount, 
                 _fingerprint: _fingerprint, 
                 _tradeGroupId: _tradeGroupId, 
-                _filler: _taker, 
-                _exitTokensPacked: _exitTokensPacked,
-                _exitShareToken: shareToken,
-                _exitCash: cash
+                _filler: _taker
             })
         );
         _amountFilled = _amount.sub(_amountRemaining);

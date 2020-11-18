@@ -83,9 +83,11 @@ export class RelayHubV2 extends c.RelayHubV2<BigNumber> {
 }
 export class StakeManager extends c.StakeManager<BigNumber> {
 }
+export class ExitExchange extends c.ExitExchange<BigNumber> {
+}
 export class AugurPredicate extends c.AugurPredicate<BigNumber> {
 }
-export class AugurPredicateTest extends c.AugurPredicateTest<BigNumber> {
+export class AugurPredicateExtension extends c.AugurPredicateExtension<BigNumber> {
 }
 export class AugurRegistry extends c.AugurRegistry<BigNumber> {
 }
@@ -93,13 +95,9 @@ export class AugurSyncer extends c.AugurSyncer<BigNumber> {
 }
 export class ExitCash extends c.ExitCash<BigNumber> {
 }
-export class ExitCashFactory extends c.ExitCashFactory<BigNumber> {
-}
 export class ExitFillOrder extends c.ExitFillOrder<BigNumber> {
 }
 export class ExitShareToken extends c.ExitShareToken<BigNumber> {
-}
-export class ExitShareTokenFactory extends c.ExitShareTokenFactory<BigNumber> {
 }
 export class ExitZeroXTrade extends c.ExitZeroXTrade<BigNumber> {
 }

@@ -42,10 +42,12 @@ if (require.main === module) {
             .then(() => {
                 console.log('Deployment to all networks succeeded');
                 process.exitCode = 0;
+                process.exit(0)
             })
             .catch(error => {
                 console.log('Deployment interrupted with error: ', error);
                 process.exitCode = 1;
+                process.exit(1)
             });
     }
 }

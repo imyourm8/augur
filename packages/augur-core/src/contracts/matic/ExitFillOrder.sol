@@ -447,7 +447,11 @@ contract ExitFillOrder is Initializable, ReentrancyGuard, IExitFillOrder {
 
     uint256 private constant MAX_APPROVAL_AMOUNT = 2 ** 256 - 1;
 
-    function initialize(IAugur _augur, IAugurTrading _augurTrading, address _zeroXTrade) public beforeInitialized {
+    function initialize(IAugur _augur, IAugurTrading _augurTrading, address _zeroXTrade, address _exitCash, address _exitShareToken) public beforeInitialized {
+        require(_zeroXTrade != address(0));
+        require(_exitCash != address(0));
+        require(_exitShareToken != address(0));
+
         endInitialization();
         augur = _augur;
         augurTrading = _augurTrading;
@@ -456,9 +460,9 @@ contract ExitFillOrder is Initializable, ReentrancyGuard, IExitFillOrder {
             augur: _augur,
             augurTrading: _augurTrading,
             orders: IOrders(_augurTrading.lookup("Orders")),
-            denominationToken: ICash(0),
+            denominationToken: ICash(_exitCash),
             profitLoss: IProfitLoss(_augurTrading.lookup("ProfitLoss")),
-            shareToken: IShareToken(0)
+            shareToken: IShareToken(_exitShareToken)
         });
         require(_storedContracts.orders != IOrders(0));
         require(_storedContracts.profitLoss != IProfitLoss(0));
@@ -467,8 +471,7 @@ contract ExitFillOrder is Initializable, ReentrancyGuard, IExitFillOrder {
 
         trade = _augurTrading.lookup("Trade");
         require(trade != address(0));
-
-        require(_zeroXTrade != address(0));
+        
         zeroXTrade = _zeroXTrade;
     }
 
@@ -500,10 +503,7 @@ contract ExitFillOrder is Initializable, ReentrancyGuard, IExitFillOrder {
         require(msg.sender == zeroXTrade, "not zeroxtrade");
         require(augur.isKnownMarket(args._market), "unknwown market");
 
-        storedContracts.shareToken = args._exitShareToken;
-        storedContracts.denominationToken = args._exitCash;
-
-        Trade.OrderData memory _orderData = Trade.createOrderData(args._exitShareToken, args._market, args._outcome, args._price, args._orderType, args._amount, args._creator);
+        Trade.OrderData memory _orderData = Trade.createOrderData(storedContracts.shareToken, args._market, args._outcome, args._price, args._orderType, args._amount, args._creator);
         Trade.Data memory _tradeData = Trade.createWithData(storedContracts, _orderData, args._filler, args._amount, args._fingerprint);
         return fillOrderInternal(args._filler, _tradeData, args._amount, args._tradeGroupId);
     }

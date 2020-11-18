@@ -149,8 +149,8 @@ export const EXTERNAL_CONTRACTS = [
     // Matic
     'AugurPredicate',
     'AugurSyncer',
-    'AugurPredicateTest',
     'ShareTokenPredicate',
+    'ExitFillOrder',
     'ExitZeroXTrade',
     'ExitShareToken',
     'ExitCash',
@@ -160,7 +160,10 @@ export const EXTERNAL_CONTRACTS = [
     'ExitCashFactory',
     'ExitShareTokenFactory',
     'MarketRegistry',
-    'FeePotPredicate'
+    'FeePotPredicate',
+    'ExitExchange',
+    'AugurPredicateExtension',
+    'AugurPredicateSpec' // contains necessary abi for the frontend
 ];
 
 export const REGISTERED_EXTERNAL_CONTRACTS = [

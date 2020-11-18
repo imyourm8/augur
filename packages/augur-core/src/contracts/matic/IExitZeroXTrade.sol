@@ -12,8 +12,7 @@ contract IExitZeroXTrade {
         uint256 _maxTrades,
         IExchange.Order[] memory _orders,
         bytes[] memory _signatures,
-        address _taker,
-        bytes memory _exitTokensPacked
+        address _taker
     ) public payable returns (uint256);
 
     function getExchange() external view returns(IExchange);

@@ -4317,7 +4317,7 @@ Allows the current owner to transfer control of the contract to a newOwner.
 
 
 
-<div class="contract-index"><span class="contract-index-title">Functions</span><ul><li><a href="#IParaOICash.initialize(contract IParaAugur,contract IParaUniverse)"><code class="function-signature">initialize(contract IParaAugur _augur, contract IParaUniverse _universe)</code></a></li><li><a href="#IParaOICash.approveFeePot()"><code class="function-signature">approveFeePot()</code></a></li><li class="inherited"><a href="#IERC20.totalSupply()"><code class="function-signature">totalSupply()</code></a></li><li class="inherited"><a href="#IERC20.balanceOf(address)"><code class="function-signature">balanceOf(address owner)</code></a></li><li class="inherited"><a href="#IERC20.transfer(address,uint256)"><code class="function-signature">transfer(address to, uint256 amount)</code></a></li><li class="inherited"><a href="#IERC20.transferFrom(address,address,uint256)"><code class="function-signature">transferFrom(address from, address to, uint256 amount)</code></a></li><li class="inherited"><a href="#IERC20.approve(address,uint256)"><code class="function-signature">approve(address spender, uint256 amount)</code></a></li><li class="inherited"><a href="#IERC20.allowance(address,address)"><code class="function-signature">allowance(address owner, address spender)</code></a></li></ul><span class="contract-index-title">Events</span><ul><li class="inherited"><a href="#IERC20.Transfer(address,address,uint256)"><code class="function-signature">Transfer(address from, address to, uint256 value)</code></a></li><li class="inherited"><a href="#IERC20.Approval(address,address,uint256)"><code class="function-signature">Approval(address owner, address spender, uint256 value)</code></a></li></ul></div>
+<div class="contract-index"><span class="contract-index-title">Functions</span><ul><li><a href="#IParaOICash.initialize(contract IParaAugur,contract IParaUniverse)"><code class="function-signature">initialize(contract IParaAugur _augur, contract IParaUniverse _universe)</code></a></li><li><a href="#IParaOICash.approveFeePot()"><code class="function-signature">approveFeePot()</code></a></li><li><a href="#IParaOICash.deposit(uint256)"><code class="function-signature">deposit(uint256 _amount)</code></a></li><li><a href="#IParaOICash.withdraw(uint256)"><code class="function-signature">withdraw(uint256 _amount)</code></a></li><li><a href="#IParaOICash.buyCompleteSets(contract IMarket,uint256)"><code class="function-signature">buyCompleteSets(contract IMarket _market, uint256 _amount)</code></a></li><li class="inherited"><a href="#IERC20.totalSupply()"><code class="function-signature">totalSupply()</code></a></li><li class="inherited"><a href="#IERC20.balanceOf(address)"><code class="function-signature">balanceOf(address owner)</code></a></li><li class="inherited"><a href="#IERC20.transfer(address,uint256)"><code class="function-signature">transfer(address to, uint256 amount)</code></a></li><li class="inherited"><a href="#IERC20.transferFrom(address,address,uint256)"><code class="function-signature">transferFrom(address from, address to, uint256 amount)</code></a></li><li class="inherited"><a href="#IERC20.approve(address,uint256)"><code class="function-signature">approve(address spender, uint256 amount)</code></a></li><li class="inherited"><a href="#IERC20.allowance(address,address)"><code class="function-signature">allowance(address owner, address spender)</code></a></li></ul><span class="contract-index-title">Events</span><ul><li class="inherited"><a href="#IERC20.Transfer(address,address,uint256)"><code class="function-signature">Transfer(address from, address to, uint256 value)</code></a></li><li class="inherited"><a href="#IERC20.Approval(address,address,uint256)"><code class="function-signature">Approval(address owner, address spender, uint256 value)</code></a></li></ul></div>
 
 
 
@@ -4328,6 +4328,24 @@ Allows the current owner to transfer control of the contract to a newOwner.
 
 
 <h4><a class="anchor" aria-hidden="true" id="IParaOICash.approveFeePot()"></a><code class="function-signature">approveFeePot()</code><span class="function-visibility">external</span></h4>
+
+
+
+
+
+<h4><a class="anchor" aria-hidden="true" id="IParaOICash.deposit(uint256)"></a><code class="function-signature">deposit(uint256 _amount) <span class="return-arrow">→</span> <span class="return-type">bool</span></code><span class="function-visibility">external</span></h4>
+
+
+
+
+
+<h4><a class="anchor" aria-hidden="true" id="IParaOICash.withdraw(uint256)"></a><code class="function-signature">withdraw(uint256 _amount) <span class="return-arrow">→</span> <span class="return-type">bool,uint256</span></code><span class="function-visibility">external</span></h4>
+
+
+
+
+
+<h4><a class="anchor" aria-hidden="true" id="IParaOICash.buyCompleteSets(contract IMarket,uint256)"></a><code class="function-signature">buyCompleteSets(contract IMarket _market, uint256 _amount) <span class="return-arrow">→</span> <span class="return-type">bool</span></code><span class="function-visibility">external</span></h4>
 
 
 
@@ -4361,7 +4379,7 @@ Allows the current owner to transfer control of the contract to a newOwner.
 
 
 
-<h4><a class="anchor" aria-hidden="true" id="ParaOICash.withdraw(uint256)"></a><code class="function-signature">withdraw(uint256 _amount) <span class="return-arrow">→</span> <span class="return-type">bool</span></code><span class="function-visibility">external</span></h4>
+<h4><a class="anchor" aria-hidden="true" id="ParaOICash.withdraw(uint256)"></a><code class="function-signature">withdraw(uint256 _amount) <span class="return-arrow">→</span> <span class="return-type">bool,uint256</span></code><span class="function-visibility">external</span></h4>
 
 
 
@@ -5448,7 +5466,7 @@ this should be used for estimation purposes as it is a view and does not actuall
 
 
 
-<div class="contract-index"><span class="contract-index-title">Functions</span><ul><li><a href="#IExchange.protocolFeeMultiplier()"><code class="function-signature">protocolFeeMultiplier()</code></a></li><li><a href="#IExchange.getOrderInfo(struct IExchange.Order)"><code class="function-signature">getOrderInfo(struct IExchange.Order order)</code></a></li><li><a href="#IExchange.fillOrder(struct IExchange.Order,uint256,bytes)"><code class="function-signature">fillOrder(struct IExchange.Order order, uint256 takerAssetFillAmount, bytes signature)</code></a></li></ul></div>
+<div class="contract-index"><span class="contract-index-title">Functions</span><ul><li><a href="#IExchange.protocolFeeMultiplier()"><code class="function-signature">protocolFeeMultiplier()</code></a></li><li><a href="#IExchange.getOrderInfo(struct IExchange.Order)"><code class="function-signature">getOrderInfo(struct IExchange.Order order)</code></a></li><li><a href="#IExchange.fillOrder(struct IExchange.Order,uint256,bytes)"><code class="function-signature">fillOrder(struct IExchange.Order order, uint256 takerAssetFillAmount, bytes signature)</code></a></li><li><a href="#IExchange.isValidSignature(struct IExchange.Order,bytes32,bytes)"><code class="function-signature">isValidSignature(struct IExchange.Order order, bytes32 orderHash, bytes signature)</code></a></li></ul></div>
 
 
 
@@ -5474,6 +5492,12 @@ Fills the input order.
  @param takerAssetFillAmount Desired amount of takerAsset to sell.
  @param signature Proof that order has been created by maker.
  @return Amounts filled and fees paid by maker and taker.
+
+
+
+<h4><a class="anchor" aria-hidden="true" id="IExchange.isValidSignature(struct IExchange.Order,bytes32,bytes)"></a><code class="function-signature">isValidSignature(struct IExchange.Order order, bytes32 orderHash, bytes signature) <span class="return-arrow">→</span> <span class="return-type">bool</span></code><span class="function-visibility">public</span></h4>
+
+
 
 
 

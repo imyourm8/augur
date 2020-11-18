@@ -12,7 +12,7 @@ export async function deployToNetwork(networkName: string) {
     const privateKey =
         config.deploy.privateKey || process.env.ETHEREUM_PRIVATE_KEY;
     const signer = await EthersFastSubmitWallet.create(
-        privateKey as string,
+        privateKey,
         provider
     );
     const dependencies = new ContractDependenciesEthers(
@@ -41,10 +41,12 @@ if (require.main === module) {
             .then(() => {
                 console.log('Deployment to all networks succeeded');
                 process.exitCode = 0;
+                process.exit(0)
             })
             .catch(error => {
                 console.log('Deployment interrupted with error: ', error);
                 process.exitCode = 1;
+                process.exit(1)
             });
     }
 }

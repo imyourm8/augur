@@ -16,9 +16,6 @@ contract IExitFillOrder {
         bytes32 _fingerprint;
         bytes32 _tradeGroupId;
         address _filler;
-        bytes _exitTokensPacked;
-        IShareToken _exitShareToken;
-        ICash _exitCash;
     }
 
     function fillZeroXOrder(

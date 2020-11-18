@@ -28,9 +28,9 @@ contract ExitCash is IExitCash, VariableSupplyToken, ExecutorAcl, ITyped, ICash 
 
     function onTokenTransfer(address _from, address _to, uint256 _value) internal {}
 
-    function initializeFromPredicate() external beforeInitialized {
+    function initialize(address _augurPredicate) public beforeInitialized {
         endInitialization();
-        _augurPredicate = msg.sender;
+        augurPredicate = _augurPredicate;
     }
 
     function transfer(address _to, uint256 _amount) public isExecuting returns (bool) {

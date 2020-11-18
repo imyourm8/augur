@@ -65,7 +65,8 @@ const IGNORE_ADDR_MAPPING = [
     'TradingCash',
     'FeePotPredicate',
     'AugurRegistry',
-    'ExitExchange'
+    'ExitExchange',
+    'AugurPredicateSpec'
 ]
 
 const NULL_ADDRESS = '0x0000000000000000000000000000000000000000';
@@ -673,20 +674,37 @@ Deploying to: ${env}
             async () => {
                 const exitZeroXTrade = new ExitZeroXTrade(this.dependencies, await this.getContractAddress('ExitZeroXTrade'));
                 console.log('Initializing ExitZeroXTrade contract');
-                await exitZeroXTrade.initialize(this.augur!.address, this.augurTrading!.address, await this.getContractAddress('ExitFillOrder'));
+                await exitZeroXTrade.initialize(
+                    this.augur!.address, 
+                    this.augurTrading!.address, 
+                    await this.getContractAddress('ExitFillOrder'),
+                    await this.getContractAddress('ExitCash'),
+                    await this.getContractAddress('ExitShareToken')
+                );
                 console.log('Initialized ExitZeroXTrade contract');
             },
             async () => {
                 const exitFillOrder = new ExitFillOrder(this.dependencies, await this.getContractAddress('ExitFillOrder'));
                 console.log('Initializing ExitFillOrder contract');
-                await exitFillOrder.initialize(this.augur!.address, this.augurTrading!.address, await this.getContractAddress('ExitZeroXTrade'));
+                await exitFillOrder.initialize(
+                    this.augur!.address, 
+                    this.augurTrading!.address, 
+                    await this.getContractAddress('ExitZeroXTrade'),
+                    await this.getContractAddress('ExitCash'),
+                    await this.getContractAddress('ExitShareToken')
+                );
                 console.log('Initialized ExitFillOrder contract');
             },
             async () => {
-                const augurPredicateContract = await this.getContractAddress('AugurPredicateTest');
+                const augurPredicateContract = await this.getContractAddress('AugurPredicate');
                 const augurPredicate = new AugurPredicate(this.dependencies, augurPredicateContract);
                 console.log('Initializing AugurPredicate contract');
-                await augurPredicate.initialize(this.augur!.address, this.augurTrading!.address, await this.getContractAddress('ExitZeroXTrade'));
+                await augurPredicate.initialize(
+                    this.augur!.address, 
+                    this.augurTrading!.address, 
+                    await this.getContractAddress('ExitZeroXTrade'),
+                    await this.getContractAddress('AugurPredicateExtension')
+                );
                 console.log('Initialized AugurPredicate contract');
             },
             async () => {
