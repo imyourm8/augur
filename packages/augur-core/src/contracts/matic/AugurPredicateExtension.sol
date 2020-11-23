@@ -58,31 +58,6 @@ contract AugurPredicateExtension is AugurPredicateBase {
         depositManager.transferAssets(address(oiCash), address(this), amount);
     }
 
-    function startExit() external {
-        // address exitor = msg.sender;
-        // ExitData storage exit = getExit(exitId);
-        // require(
-        //     exit.status == ExitStatus.Initialized ||
-        //         exit.status == ExitStatus.InFlightExecuted,
-        //     '9' // "incorrect status"
-        // );
-        // exit.status = ExitStatus.InProgress;
-        // exit.startExitTime = now;
-
-        // uint256 withdrawExitId = exit.exitPriority << 1;
-        // address rootToken = address(oiCash);
-        // withdrawManager.addExitToQueue(
-        //     exitor,
-        //     predicateRegistry.cash(), // OICash maps to TradingCash on matic
-        //     rootToken,
-        //     exitId, // exitAmountOrTokenId - think of exitId like a token Id
-        //     bytes32(0), // txHash - field not required for now
-        //     false, // isRegularExit
-        //     withdrawExitId
-        // );
-        // withdrawManager.addInput(withdrawExitId, 0, exitor, rootToken);
-    }
-
     /**
      * @notice Call initializeForExit to instantiate new shareToken and Cash contracts to replay history from Matic
      * @dev new ShareToken() / new Cash() causes the bytecode of this contract to be too large, working around that limitation for now,
@@ -155,13 +130,9 @@ contract AugurPredicateExtension is AugurPredicateBase {
 
     function prepareInFlightTradeExit(bytes calldata shares, bytes calldata cash) external {
         setIsExecuting(true);
-        address sharesClaimedAccount = claimShareBalances(shares);
-        require(sharesClaimedAccount == msg.sender, '100'); // can't start exit with claiming counterparty's shares
 
-        if (cash.length > 0) {
-            // not mandatory for in-flight trade
-            claimCashBalance(cash, sharesClaimedAccount);
-        }
+        // require(claimSharesAndCash(shares, cash) == msg.sender);
+        claimSharesAndCash(shares, cash);
         
         setIsExecuting(false);
     }

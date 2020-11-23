@@ -92,6 +92,10 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
         exitCash = _exitCash;
     }
 
+    function getCodeExtension() external view returns(address) {
+        return codeExtension;
+    }
+
     function() external payable {
         bytes memory data = msg.data;
         address _codeExtension = codeExtension;
@@ -112,13 +116,7 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
 
             // revert instead of invalid() bc if the underlying call failed with invalid() it already wasted gas.
             // if the call returned error data, forward it
-            switch result
-                case 0 {
-                    revert(ptr, size)
-                }
-                default {
-                    return(ptr, size)
-                }
+            return(ptr, size)
         }
     }
 
@@ -169,49 +167,69 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
     //     setIsExecuting(false);
     // }
 
+    function startInFlightTradeExit() public {
+        // setIsExecuting(true);
+        // claimSharesAndCash(shares, cash);
+        // require(claimSharesAndCash(shares, cash) != msg.sender, "test");
+
+        // uint256 exitId = getExitId(msg.sender);
+        // ExitData storage exit = getExit(exitId);
+        // address signer;
+
+        // (signer, exit.inFlightTxHash) = erc20Predicate.getAddressFromTx(inFlightTx);
+
+        // require(signer == msg.sender, "test2"); // only signer allowed to exit with his trade
+        
+        // this.executeTrade.value(msg.value)(inFlightTx, exitId, signer);
+
+        // startExit();
+
+        // setIsExecuting(false);
+    }
+
     function executeInFlightTransaction(bytes memory data) public payable {
-        uint256 exitId = getExitId(msg.sender);
-        ExitData storage exit = getExit(exitId);
-        // require(
-        //     exit.status == ExitStatus.Initialized,
-        //     '14' // "executeInFlightTransaction: Exit should be in Initialized state"
-        // );
-        exit.status = ExitStatus.InFlightExecuted; // this ensures only 1 in-flight tx can be replayed on-chain
+        // uint256 exitId = getExitId(msg.sender);
+        // ExitData storage exit = getExit(exitId);
+        // // require(
+        // //     exit.status == ExitStatus.Initialized,
+        // //     '14' // "executeInFlightTransaction: Exit should be in Initialized state"
+        // // );
+        // exit.status = ExitStatus.InFlightExecuted; // this ensures only 1 in-flight tx can be replayed on-chain
 
-        RLPReader.RLPItem[] memory targetTx = ProofReader.convertToTx(data);
-        require(targetTx.length == 9, '13'); // "incorrect transaction data"
+        // RLPReader.RLPItem[] memory targetTx = ProofReader.convertToTx(data);
+        // require(targetTx.length == 9, '13'); // "incorrect transaction data"
 
-        address to = ProofReader.getTxTo(targetTx);
-        address signer;
-        (signer, exit.inFlightTxHash) = erc20Predicate
-            .getAddressFromTx(data);
+        // address to = ProofReader.getTxTo(targetTx);
+        // address signer;
+        // (signer, exit.inFlightTxHash) = erc20Predicate
+        //     .getAddressFromTx(data);
 
-        setIsExecuting(true);
+        // setIsExecuting(true);
 
-        PredicateRegistry.ContractType _type = predicateRegistry
-            .getContractType(to);
+        // PredicateRegistry.ContractType _type = predicateRegistry
+        //     .getContractType(to);
 
-        if (_type == PredicateRegistry.ContractType.ShareToken) {
-            require(signer == msg.sender, '12'); // "executeInFlightTransaction: signer != msg.sender"
-            exit.lastGoodNonce =
-                int256(ProofReader.getTxNonce(targetTx)) -
-                1;
-            shareTokenPredicate.executeInFlightTransaction(
-                data,
-                signer,
-                exitShareToken
-            );
-        } else if (_type == PredicateRegistry.ContractType.Cash) {
-            require(signer == msg.sender, '12'); // "executeInFlightTransaction: signer != msg.sender"
-            exit.lastGoodNonce =
-                int256(ProofReader.getTxNonce(targetTx)) -
-                1;
-            executeCashInFlight(data, exitId);
-        } else if (_type == PredicateRegistry.ContractType.ZeroXTrade) {
-            this.executeTrade.value(msg.value)(data, exitId, signer);
-        }
+        // if (_type == PredicateRegistry.ContractType.ShareToken) {
+        //     require(signer == msg.sender, '12'); // "executeInFlightTransaction: signer != msg.sender"
+        //     exit.lastGoodNonce =
+        //         int256(ProofReader.getTxNonce(targetTx)) -
+        //         1;
+        //     shareTokenPredicate.executeInFlightTransaction(
+        //         data,
+        //         signer,
+        //         exitShareToken
+        //     );
+        // } else if (_type == PredicateRegistry.ContractType.Cash) {
+        //     require(signer == msg.sender, '12'); // "executeInFlightTransaction: signer != msg.sender"
+        //     exit.lastGoodNonce =
+        //         int256(ProofReader.getTxNonce(targetTx)) -
+        //         1;
+        //     executeCashInFlight(data, exitId);
+        // } else if (_type == PredicateRegistry.ContractType.ZeroXTrade) {
+        //     this.executeTrade.value(msg.value)(data, exitId, signer);
+        // }
 
-        setIsExecuting(false);
+        // setIsExecuting(false);
     }
 
     struct ExecuteTradeVars {

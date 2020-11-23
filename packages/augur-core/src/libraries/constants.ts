@@ -157,8 +157,6 @@ export const EXTERNAL_CONTRACTS = [
     'TradingCash',
     'AugurRegistry',
     'PredicateRegistry',
-    'ExitCashFactory',
-    'ExitShareTokenFactory',
     'MarketRegistry',
     'FeePotPredicate',
     'ExitExchange',

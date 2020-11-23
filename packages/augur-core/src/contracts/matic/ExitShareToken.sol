@@ -8,6 +8,7 @@ import 'ROOT/IAugur.sol';
 import 'ROOT/libraries/TokenId.sol';
 import 'ROOT/matic/ExecutorAcl.sol';
 import 'ROOT/matic/IExitShareToken.sol';
+import 'ROOT/matic/IAugurPredicate.sol';
 
 /**
  * @title Share Token
@@ -19,7 +20,7 @@ contract ExitShareToken is ITyped, ERC1155, IExitShareToken, ReentrancyGuard, Ex
 
     struct MarketData {
         uint256 numOutcomes;
-        uint256 numTicks;
+        uint256 numTicks; 
     }
 
     mapping(address => MarketData) public markets;
@@ -32,6 +33,7 @@ contract ExitShareToken is ITyped, ERC1155, IExitShareToken, ReentrancyGuard, Ex
         augur = _augur;
         cash = ICash(_cash);
         augurPredicate = _augurPredicate;
+        augurPredicateExtension = IAugurPredicate(_augurPredicate).getCodeExtension();
     }
 
     /**
@@ -62,7 +64,6 @@ contract ExitShareToken is ITyped, ERC1155, IExitShareToken, ReentrancyGuard, Ex
     }
 
     function initializeMarket(IMarket _market, uint256 _numOutcomes, uint256 _numTicks) public onlyPredicate {
-        // require (augur.isKnownUniverse(IUniverse(msg.sender)));
         markets[address(_market)].numOutcomes = _numOutcomes;
         markets[address(_market)].numTicks = _numTicks;
     }

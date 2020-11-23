@@ -41,10 +41,13 @@ import {
     TestNetReputationToken,
     UniswapV2Router02,
     AugurPredicate,
-    ExitFillOrder
+    ExitFillOrder,
+    ExitZeroXTrade,
+    ExitCash,
+    ExitShareToken
 } from './ContractInterfaces';
 import { Contracts, ContractData } from './Contracts';
-import { Dependencies, ExitZeroXTrade } from './GenericContractInterfaces';
+import { Dependencies } from './GenericContractInterfaces';
 import { NetworkId } from '@augurproject/utils';
 import { ContractAddresses, SDKConfiguration, mergeConfig } from '@augurproject/utils';
 import { updateConfig } from '@augurproject/artifacts';
@@ -671,6 +674,24 @@ Deploying to: ${env}
         console.log('Initializing contracts...');
 
         const readiedPromises = [
+            async () => {
+                const exitCash = new ExitCash(this.dependencies, await this.getContractAddress('ExitCash'));
+                console.log('Initializing ExitCash contract');
+                await exitCash.initialize(
+                    await this.getContractAddress('AugurPredicate')
+                );
+                console.log('Initialized ExitCash contract');
+            },
+            async () => {
+                const exitShareToken = new ExitShareToken(this.dependencies, await this.getContractAddress('ExitShareToken'));
+                console.log('Initializing ExitShareToken contract');
+                await exitShareToken.initialize(
+                    this.augur!.address, 
+                    await this.getContractAddress('Cash'),
+                    await this.getContractAddress('AugurPredicate')
+                );
+                console.log('Initialized ExitShareToken contract');
+            },
             async () => {
                 const exitZeroXTrade = new ExitZeroXTrade(this.dependencies, await this.getContractAddress('ExitZeroXTrade'));
                 console.log('Initializing ExitZeroXTrade contract');

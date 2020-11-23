@@ -89,6 +89,8 @@ export class AugurPredicate extends c.AugurPredicate<BigNumber> {
 }
 export class AugurPredicateExtension extends c.AugurPredicateExtension<BigNumber> {
 }
+export class AugurPredicateSpec extends c.AugurPredicateSpec<BigNumber> {
+}
 export class AugurRegistry extends c.AugurRegistry<BigNumber> {
 }
 export class AugurSyncer extends c.AugurSyncer<BigNumber> {

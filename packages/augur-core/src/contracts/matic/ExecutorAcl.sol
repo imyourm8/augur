@@ -5,6 +5,7 @@ import 'ROOT/libraries/Initializable.sol';
 contract ExecutorAcl is Initializable {
     bool allowExecution;
     address internal augurPredicate;
+    address internal augurPredicateExtension;
 
     modifier onlyPredicate() {
         _assertOnlyPredicate();
@@ -18,7 +19,7 @@ contract ExecutorAcl is Initializable {
     }
 
     function _assertOnlyPredicate() private view {
-        require(msg.sender == augurPredicate, "ExecutorAcl.onlyPredicate is authorized");
+        require(msg.sender == augurPredicate || msg.sender == augurPredicateExtension, "ExecutorAcl.onlyPredicate is authorized");
     }
 
     function _assertIsExecuting() private view {

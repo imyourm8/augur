@@ -5,7 +5,7 @@ import 'ROOT/libraries/ITyped.sol';
 import 'ROOT/libraries/token/VariableSupplyToken.sol';
 import 'ROOT/matic/ExecutorAcl.sol';
 import 'ROOT/matic/IExitCash.sol';
-
+import 'ROOT/matic/IAugurPredicate.sol';
 
 /**
  * @title Cash
@@ -31,6 +31,7 @@ contract ExitCash is IExitCash, VariableSupplyToken, ExecutorAcl, ITyped, ICash 
     function initialize(address _augurPredicate) public beforeInitialized {
         endInitialization();
         augurPredicate = _augurPredicate;
+        augurPredicateExtension = IAugurPredicate(_augurPredicate).getCodeExtension();
     }
 
     function transfer(address _to, uint256 _amount) public isExecuting returns (bool) {

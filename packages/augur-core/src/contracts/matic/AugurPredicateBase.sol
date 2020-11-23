@@ -142,37 +142,46 @@ contract AugurPredicateBase {
      * logIndex Log Index to read from the receipt
      */
     function claimShareBalances(bytes memory data) internal returns(address) {
-        (
-            address[] memory accounts,
-            address[] memory markets,
-            uint256[] memory outcomes,
-            uint256[] memory balances,
-            uint256[] memory ages
-        ) = shareTokenPredicate.parseData(data);
+        // bytes32 txHash = getTxHash(data.toRlpItem().toList());
 
-        address account = accounts[0];
-        address market = markets[0];
-        uint256 age = 0;
+        // (
+        //     address[] memory accounts,
+        //     address[] memory markets,
+        //     uint256[] memory outcomes,
+        //     uint256[] memory balances,
+        //     uint256 age
+        // ) = shareTokenPredicate.parseData(data);
 
-        uint256 exitId = getExitId(account);
-        ExitData storage exit = getExit(exitId);
+        // address account = accounts[0];
+        // address market = markets[0];
 
-        for (uint256 i = 0; i < accounts.length; i++) {
-            require(account == accounts[i]);
-            require(market == markets[i]);
+        // uint256 exitId = getExitId(account);
+        // ExitData storage exit = getExit(exitId);
 
-            account = accounts[i];
-            market = markets[i];
+        // for (uint256 i = 0; i < accounts.length; i++) {
+        //     require(account == accounts[i]);
+        //     require(market == markets[i]);
 
-            age = age.max(ages[i]);
-            exitShareToken.mint(account, IMarket(market), outcomes[i], balances[i]);
-        }
+        //     account = accounts[i];
+        //     market = markets[i];
 
-        exit.exitPriority = age;
+        //     // exitShareToken.mint(account, IMarket(market), outcomes[i], balances[i]);
+        // }
 
-        _addMarketToExit(exitId, market);
+        // exit.exitPriority = exit.exitPriority.max(age);
 
-        return account;
+        // _addMarketToExit(exitId, market);
+
+        // txHash = keccak256(
+        //     abi.encodePacked(
+        //         txHash, 
+        //         account
+        //     )
+        // );
+        // require(claimedTxs[txHash] == false, "tx claimed");
+        // claimedTxs[txHash] = true;
+
+        return address(0x0);
     }
 
     /**
@@ -193,6 +202,7 @@ contract AugurPredicateBase {
     function claimCashBalance(bytes memory data, address participant)
         internal
     {
+        bytes32 txHash = getTxHash(data.toRlpItem().toList());
         uint256 exitId = getExitId(participant);
         ExitData storage exit = getExit(exitId);
 
@@ -213,6 +223,15 @@ contract AugurPredicateBase {
         exit.exitPriority = exit.exitPriority.max(age);
 
         exitCash.faucet(participant, closingBalance);
+
+        txHash = keccak256(
+            abi.encodePacked(
+                txHash, 
+                participant
+            )
+        );
+        require(claimedTxs[txHash] == false);
+        claimedTxs[txHash] = true;
     }
 
     function _addMarketToExit(uint256 exitId, address market) internal {
@@ -229,5 +248,40 @@ contract AugurPredicateBase {
             exit.market = _market;
             exitShareToken.initializeMarket(_market, numOutcomes, numTicks);
         }
+    }
+
+    function claimSharesAndCash(bytes memory shares, bytes memory cash) internal returns(address account) {
+        // account = claimShareBalances(shares);
+
+        // if (cash.length > 0) {
+        //     // not mandatory for in-flight trade
+        //     // claimCashBalance(cash, account);
+        // }
+
+        // return account;
+    }
+
+    function startExit() internal {
+        address exitor = msg.sender;
+        uint256 exitId = getExitId(exitor);
+        ExitData storage exit = getExit(exitId);
+        require(
+            exit.startExitTime == 0,
+            '9' // exit in progress
+        );
+        exit.startExitTime = now;
+
+        uint256 withdrawExitId = exit.exitPriority << 1;
+        address rootToken = address(oiCash);
+        withdrawManager.addExitToQueue(
+            exitor,
+            predicateRegistry.cash(), // OICash maps to TradingCash on matic
+            rootToken,
+            exitId, // exitAmountOrTokenId - think of exitId like a token Id
+            bytes32(0), // txHash - field not required for now
+            false, // isRegularExit
+            withdrawExitId
+        );
+        withdrawManager.addInput(withdrawExitId, 0, exitor, rootToken);
     }
 }

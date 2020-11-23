@@ -15,6 +15,8 @@ contract ShareTokenPredicate is Initializable {
     using RLPReader for bytes;
     using RLPReader for RLPReader.RLPItem;
 
+
+    
     event ExitFinalized(uint256 indexed exitId, address indexed exitor);
 
     // event ShareTokenBalanceChanged(address indexed universe, address indexed account, address indexed market, uint256 outcome, uint256 balance);
@@ -62,44 +64,51 @@ contract ShareTokenPredicate is Initializable {
             address[] memory markets,
             uint256[] memory outcomes,
             uint256[] memory balances,
-            uint256[] memory ages
+            uint256 age
         )
     {
         RLPReader.RLPItem[] memory referenceTxData = data.toRlpItem().toList();
-        bytes memory receipt = referenceTxData[6].toBytes();
-        RLPReader.RLPItem[] memory inputItems = receipt.toRlpItem().toList();
+        // bytes memory receipt = referenceTxData[6].toBytes();
+        // RLPReader.RLPItem[] memory inputItems = receipt.toRlpItem().toList();
 
         uint256 totalLogs = referenceTxData.length - 9;
-        accounts = new address[](totalLogs);
-        markets = new address[](totalLogs);
-        outcomes = new uint256[](totalLogs);
-        balances = new uint256[](totalLogs);
-        ages = new uint256[](totalLogs);
+        accounts = new address[](1);
+        markets = new address[](1);
+        outcomes = new uint256[](1);
+        balances = new uint256[](1);
 
-        for (uint256 i = 9; i < referenceTxData.length; i++) {
-            uint256 logIndex = referenceTxData[9].toUint();
-            require(logIndex < MAX_LOGS, 'Supporting a max of 100 logs');
-            ages[i - 9] = withdrawManager.verifyInclusion(
-                data,
-                0, /* offset */
-                false /* verifyTxInclusion */
-            );
-            inputItems = inputItems[3].toList()[logIndex].toList(); // select log based on given logIndex
+        // age = withdrawManager.verifyInclusion(
+        //     data,
+        //     0, /* offset */
+        //     false /* verifyTxInclusion */
+        // );
 
-            bytes memory logData = inputItems[2].toBytes();
-            inputItems = inputItems[1].toList(); // topics
-            // now, inputItems[i] refers to i-th (0-based) topic in the topics array
-            require(
-                bytes32(inputItems[0].toUint()) ==
-                    SHARE_TOKEN_BALANCE_CHANGED_EVENT_SIG,
-                'ShareTokenPredicate.parseData: Not ShareTokenBalanceChanged event signature'
-            );
-            // inputItems[1] is the universe
-            accounts[i - 9] = address(inputItems[2].toUint());
-            markets[i - 9] = address(inputItems[3].toUint());
-            outcomes[i - 9] = BytesLib.toUint(logData, 0);
-            balances[i - 9] = BytesLib.toUint(logData, 32);
-        }
+        // RLPReader.RLPItem[] memory logs = inputItems[3].toList();
+
+        // uint256 prevLogIndex = MAX_LOGS;
+        // uint i = 9;
+        // for (uint256 i = 9; i < referenceTxData.length; i++) {
+            // uint256 logIndex = referenceTxData[i].toUint();
+            // require(logIndex < MAX_LOGS, 'Supporting a max of 100 logs');
+            // // require(prevLogIndex == MAX_LOGS || logIndex > prevLogIndex);
+            
+            // prevLogIndex = logIndex;
+            // inputItems = logs[logIndex].toList(); // select log based on given logIndex
+
+            // bytes memory logData = inputItems[2].toBytes();
+
+            // inputItems = inputItems[1].toList(); // topics
+            // // now, inputItems[i] refers to i-th (0-based) topic in the topics array
+            // require(
+            //     bytes32(inputItems[0].toUint()) ==
+            //         SHARE_TOKEN_BALANCE_CHANGED_EVENT_SIG,
+            //     'ShareTokenPredicate.parseData: Not ShareTokenBalanceChanged event signature'
+            // );
+            // accounts[i - 9] = address(inputItems[2].toUint());
+            // markets[i - 9] = address(inputItems[3].toUint());
+            // outcomes[i - 9] = BytesLib.toUint(logData, 0);
+            // balances[i - 9] = BytesLib.toUint(logData, 32);
+        // }
     }
 
     function executeInFlightTransaction(
