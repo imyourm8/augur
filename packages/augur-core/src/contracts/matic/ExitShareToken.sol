@@ -63,9 +63,14 @@ contract ExitShareToken is ITyped, ERC1155, IExitShareToken, ReentrancyGuard, Ex
         _batchTransferFrom(_from, _to, _ids, _values, bytes(""), false);
     }
 
-    function initializeMarket(IMarket _market, uint256 _numOutcomes, uint256 _numTicks) public onlyPredicate {
-        markets[address(_market)].numOutcomes = _numOutcomes;
-        markets[address(_market)].numTicks = _numTicks;
+    function isMarketInitialized(IMarket _market) public view returns (bool) {
+        return markets[address(_market)].numTicks != 0;
+    }
+
+    function initializeMarket(IMarket _market) public {
+        require(augur.isKnownMarket(_market));
+        markets[address(_market)].numOutcomes = _market.getNumberOfOutcomes();
+        markets[address(_market)].numTicks = _market.getNumTicks();
     }
 
     /**
@@ -93,6 +98,10 @@ contract ExitShareToken is ITyped, ERC1155, IExitShareToken, ReentrancyGuard, Ex
     }
 
     function buyCompleteSetsInternal(IMarket _market, address _account, uint256 _amount) internal returns (bool) {
+        if (!isMarketInitialized(_market)) {
+            initializeMarket(_market);
+        }
+
         uint256 _numOutcomes = markets[address(_market)].numOutcomes;
         uint256 _numTicks = markets[address(_market)].numTicks;
 
@@ -133,6 +142,10 @@ contract ExitShareToken is ITyped, ERC1155, IExitShareToken, ReentrancyGuard, Ex
      * @return Bool True
      */
     function buyCompleteSetsForTrade(IMarket _market, uint256 _amount, uint256 _longOutcome, address _longRecipient, address _shortRecipient) external isExecuting returns (bool) {
+        if (!isMarketInitialized(_market)) {
+            initializeMarket(_market);
+        }
+
         uint256 _numOutcomes = markets[address(_market)].numOutcomes;
 
         require(_numOutcomes != 0, "Invalid Market provided");
@@ -233,8 +246,8 @@ contract ExitShareToken is ITyped, ERC1155, IExitShareToken, ReentrancyGuard, Ex
 
         {
             uint256 _longPayout = _payout.mul(_price) / _market.getNumTicks();
-            require(cash.transfer(_longRecipient, _longPayout));
-            require(cash.transfer(_shortRecipient, _payout.sub(_longPayout)));
+            require(cash.transfer(_longRecipient, _longPayout), "fail1");
+            require(cash.transfer(_shortRecipient, _payout.sub(_longPayout)), "fail2");
         }
 
         // assertBalances(_market);
@@ -242,6 +255,10 @@ contract ExitShareToken is ITyped, ERC1155, IExitShareToken, ReentrancyGuard, Ex
     }
 
     function burnCompleteSets(IMarket _market, address _account, uint256 _amount, address _sourceAccount, bytes32 _fingerprint) private returns (uint256 _payout, uint256 _creatorFee, uint256 _reportingFee) {
+        if (!isMarketInitialized(_market)) {
+            initializeMarket(_market);
+        }
+        
         uint256 _numOutcomes = markets[address(_market)].numOutcomes;
         uint256 _numTicks = markets[address(_market)].numTicks;
 
@@ -273,8 +290,6 @@ contract ExitShareToken is ITyped, ERC1155, IExitShareToken, ReentrancyGuard, Ex
         _reportingFee = _payout.div(_reportingFeeDivisor);
         _payout = _payout.sub(_creatorFee).sub(_reportingFee);
 
-        // @todo handle market creator and reporter fee properly, if applicable
-
         // if (_creatorFee != 0) {
         //     _market.recordMarketCreatorFees(_creatorFee, _sourceAccount, _fingerprint);
         // }
@@ -284,8 +299,6 @@ contract ExitShareToken is ITyped, ERC1155, IExitShareToken, ReentrancyGuard, Ex
         // if (_reportingFee != 0) {
         //     require(cash.transfer(address(_universe.getOrCreateNextDisputeWindow(false)), _reportingFee));
         // }
-
-        // augur.logMarketOIChanged(_universe, _market);
     }
 
     /**

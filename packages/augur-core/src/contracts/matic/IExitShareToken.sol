@@ -9,7 +9,7 @@ import 'ROOT/reporting/IUniverse.sol';
 
 
 contract IExitShareToken is ITyped, IERC1155 {
-    function initializeMarket(IMarket _market, uint256 _numOutcomes, uint256 _numTicks) public;
+    function initializeMarket(IMarket _market) public;
     function unsafeTransferFrom(address _from, address _to, uint256 _id, uint256 _value) public;
     function unsafeBatchTransferFrom(address _from, address _to, uint256[] memory _ids, uint256[] memory _values) public;
     function claimTradingProceeds(IMarket _market, address _shareHolder, bytes32 _fingerprint) external returns (uint256[] memory _outcomeFees);

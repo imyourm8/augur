@@ -58,24 +58,6 @@ contract AugurPredicateExtension is AugurPredicateBase {
         depositManager.transferAssets(address(oiCash), address(this), amount);
     }
 
-    /**
-     * @notice Call initializeForExit to instantiate new shareToken and Cash contracts to replay history from Matic
-     * @dev new ShareToken() / new Cash() causes the bytecode of this contract to be too large, working around that limitation for now,
-        however, the intention is to deploy a new ShareToken and Cash contract per exit - todo: use proxies for that
-     */
-    function initializeForExit() external returns (uint256 exitId) {
-        // lookupExit[exitId] = ExitData({
-        //     exitShareToken: exitShareToken,
-        //     exitCash: exitCash,
-        //     exitPriority: 0,
-        //     startExitTime: 0,
-        //     lastGoodNonce: -1,
-        //     inFlightTxHash: bytes32(0),
-        //     status: ExitStatus.Initialized,
-        //     marketsList: new IMarket[](0)
-        // });
-    }
-
     // function claimLastGoodNonce(bytes calldata lastCheckpointedTx, uint256 ) external {
     //     uint256 age = withdrawManager.verifyInclusion(
     //         lastCheckpointedTx,
@@ -95,82 +77,13 @@ contract AugurPredicateExtension is AugurPredicateBase {
     //     );
     // }
 
-    
-    // function claimShareBalance(bytes calldata data) external {
-    //     uint256 exitId = getExitId(msg.sender);
-    //     ExitData storage exit = getExit(exitId);
-    //     // require(
-    //     //     exit.status == ExitStatus.Initialized,
-    //     //     '16' // "Predicate.claimShareBalance: Please call initializeForExit first"
-    //     // );
-    //     (
-    //         address account,
-    //         address market,
-    //         uint256 outcome,
-    //         uint256 balance,
-    //         uint256 age
-    //     ) = shareTokenPredicate.parseData(data);
-
-    //     require(exitShareToken.balanceOfMarketOutcome(IMarket(market), outcome, account) == 0, '16'); // shares were claimed
-
-    //     _addMarketToExit(exitId, market);
-
-    //     setIsExecuting(true);
-    //     exit.exitPriority = exit.exitPriority.max(
-    //         age
-    //     );
-    //     exitShareToken.mint(
-    //         account,
-    //         IMarket(market),
-    //         outcome,
-    //         balance
-    //     );
-    //     setIsExecuting(false);
-    // }
-
     function prepareInFlightTradeExit(bytes calldata shares, bytes calldata cash) external {
-        setIsExecuting(true);
+        setIsExecuting(true); 
 
-        // require(claimSharesAndCash(shares, cash) == msg.sender);
-        claimSharesAndCash(shares, cash);
+        claimSharesAndCash(shares, cash, msg.sender);
         
         setIsExecuting(false);
     }
-
-    
-    // function claimCashBalance(bytes calldata data, address participant)
-    //     external
-    // {
-    //     uint256 exitId = getExitId(msg.sender);
-    //     ExitData storage exit = getExit(exitId);
-    //     // require(
-    //     //     exit.status == ExitStatus.Initialized,
-    //     //     '16' // "Predicate.claimCashBalance: Please call initializeForExit first"
-    //     // );
-    //     bytes memory _preState = erc20Predicate.interpretStateUpdate(
-    //         abi.encode(
-    //             data,
-    //             participant,
-    //             true, /* verifyInclusionInCheckpoint */
-    //             false /* isChallenge */
-    //         )
-    //     );
-
-    //     require(exitCash.balanceOf(participant) == 0, '16'); // cash was claimed
-
-    //     (uint256 closingBalance, uint256 age, , address tokenAddress) = abi
-    //         .decode(_preState, (uint256, uint256, address, address));
-
-    //     require(tokenAddress == predicateRegistry.cash(), '17'); // "not matic cash"
-
-    //     exit.exitPriority = exit.exitPriority.max(
-    //         age
-    //     );
-
-    //     setIsExecuting(true);
-    //     exitCash.faucet(participant, closingBalance);
-    //     setIsExecuting(false);
-    // }
 
     function startExitWithBurntTokens(bytes calldata data) external {
         bytes memory _preState = erc20Predicate.interpretStateUpdate(

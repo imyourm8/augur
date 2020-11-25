@@ -508,7 +508,6 @@ contract ExitFillOrder is Initializable, ReentrancyGuard, IExitFillOrder {
         return fillOrderInternal(args._filler, _tradeData, args._amount, args._tradeGroupId);
     }
 
-
     function fillOrderInternal(address _filler, Trade.Data memory _tradeData, uint256 _amountFillerWants, bytes32 _tradeGroupId) internal nonReentrant returns (uint256 _amountRemainingFillerWants, uint256 _totalFees) {
         uint256 _marketCreatorFees;
         uint256 _reporterFees;
@@ -519,6 +518,8 @@ contract ExitFillOrder is Initializable, ReentrancyGuard, IExitFillOrder {
         uint256 _tokensRefunded = _tradeData.tradeMakerTokensForFillerTokens();
 
         sellCompleteSets(_tradeData);
+
+        // END here
 
         // Problem - next lines are not possible to be executed due to ExitFillOrder being unknown contract
 

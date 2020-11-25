@@ -687,7 +687,7 @@ Deploying to: ${env}
                 console.log('Initializing ExitShareToken contract');
                 await exitShareToken.initialize(
                     this.augur!.address, 
-                    await this.getContractAddress('Cash'),
+                    await this.getContractAddress('ExitCash'),
                     await this.getContractAddress('AugurPredicate')
                 );
                 console.log('Initialized ExitShareToken contract');

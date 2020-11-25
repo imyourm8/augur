@@ -68,47 +68,46 @@ contract ShareTokenPredicate is Initializable {
         )
     {
         RLPReader.RLPItem[] memory referenceTxData = data.toRlpItem().toList();
-        // bytes memory receipt = referenceTxData[6].toBytes();
-        // RLPReader.RLPItem[] memory inputItems = receipt.toRlpItem().toList();
+        bytes memory receipt = referenceTxData[6].toBytes();
+        RLPReader.RLPItem[] memory inputItems = receipt.toRlpItem().toList();
 
         uint256 totalLogs = referenceTxData.length - 9;
-        accounts = new address[](1);
-        markets = new address[](1);
-        outcomes = new uint256[](1);
-        balances = new uint256[](1);
+        accounts = new address[](totalLogs);
+        markets = new address[](totalLogs);
+        outcomes = new uint256[](totalLogs);
+        balances = new uint256[](totalLogs);
 
-        // age = withdrawManager.verifyInclusion(
-        //     data,
-        //     0, /* offset */
-        //     false /* verifyTxInclusion */
-        // );
+        age = withdrawManager.verifyInclusion(
+            data,
+            0, /* offset */
+            false /* verifyTxInclusion */
+        );
 
-        // RLPReader.RLPItem[] memory logs = inputItems[3].toList();
+        RLPReader.RLPItem[] memory logs = inputItems[3].toList();
 
-        // uint256 prevLogIndex = MAX_LOGS;
-        // uint i = 9;
-        // for (uint256 i = 9; i < referenceTxData.length; i++) {
-            // uint256 logIndex = referenceTxData[i].toUint();
-            // require(logIndex < MAX_LOGS, 'Supporting a max of 100 logs');
-            // // require(prevLogIndex == MAX_LOGS || logIndex > prevLogIndex);
+        uint256 prevLogIndex = MAX_LOGS;
+        for (uint256 i = 9; i < referenceTxData.length; i++) {
+            uint256 logIndex = referenceTxData[i].toUint();
+            require(logIndex < MAX_LOGS, 'Supporting a max of 100 logs');
+            require(prevLogIndex == MAX_LOGS || logIndex > prevLogIndex);
             
-            // prevLogIndex = logIndex;
-            // inputItems = logs[logIndex].toList(); // select log based on given logIndex
+            prevLogIndex = logIndex;
+            inputItems = logs[logIndex].toList(); // select log based on given logIndex
 
-            // bytes memory logData = inputItems[2].toBytes();
+            bytes memory logData = inputItems[2].toBytes();
 
-            // inputItems = inputItems[1].toList(); // topics
-            // // now, inputItems[i] refers to i-th (0-based) topic in the topics array
-            // require(
-            //     bytes32(inputItems[0].toUint()) ==
-            //         SHARE_TOKEN_BALANCE_CHANGED_EVENT_SIG,
-            //     'ShareTokenPredicate.parseData: Not ShareTokenBalanceChanged event signature'
-            // );
-            // accounts[i - 9] = address(inputItems[2].toUint());
-            // markets[i - 9] = address(inputItems[3].toUint());
-            // outcomes[i - 9] = BytesLib.toUint(logData, 0);
-            // balances[i - 9] = BytesLib.toUint(logData, 32);
-        // }
+            inputItems = inputItems[1].toList(); // topics
+            // now, inputItems[i] refers to i-th (0-based) topic in the topics array
+            require(
+                bytes32(inputItems[0].toUint()) ==
+                    SHARE_TOKEN_BALANCE_CHANGED_EVENT_SIG,
+                'ShareTokenPredicate.parseData: Not ShareTokenBalanceChanged event signature'
+            );
+            accounts[i - 9] = address(inputItems[2].toUint());
+            markets[i - 9] = address(inputItems[3].toUint());
+            outcomes[i - 9] = BytesLib.toUint(logData, 0);
+            balances[i - 9] = BytesLib.toUint(logData, 32);
+        }
     }
 
     function executeInFlightTransaction(

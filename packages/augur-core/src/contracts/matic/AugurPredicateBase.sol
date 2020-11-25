@@ -6,6 +6,7 @@ import 'ROOT/matic/libraries/BytesLib.sol';
 import 'ROOT/matic/libraries/RLPEncode.sol';
 import 'ROOT/matic/libraries/RLPReader.sol';
 import 'ROOT/matic/libraries/ProofReader.sol';
+import 'ROOT/matic/libraries/Common.sol';
 import 'ROOT/matic/plasma/IWithdrawManager.sol';
 import 'ROOT/matic/plasma/IErc20Predicate.sol';
 import 'ROOT/matic/ShareTokenPredicate.sol';
@@ -62,8 +63,8 @@ contract AugurPredicateBase {
         uint256 startExitTime;
         int256 lastGoodNonce;
         bytes32 inFlightTxHash;
-        ExitStatus status;
         IMarket market;
+        address counterparty;
     }
 
     struct TradeData {
@@ -120,11 +121,27 @@ contract AugurPredicateBase {
         for (uint8 i = 0; i <= 5; i++) {
             rawTx[i] = txList[i].toBytes();
         }
-        rawTx[6] = BytesLib.fromUint(MATIC_NETWORK_ID);
+
+        rawTx[6] = abi.encodePacked(MATIC_NETWORK_ID);
         rawTx[7] = hex''; // [7] and [8] have something to do with v, r, s values
         rawTx[8] = hex'';
 
         txHash = keccak256(RLPEncode.encodeList(rawTx));
+    }
+
+    function getAddressFromTx(RLPReader.RLPItem[] memory txList)
+        internal
+        pure
+        returns (address signer, bytes32 txHash)
+    {
+        txHash = getTxHash(txList);
+
+        signer = ecrecover(
+            txHash,
+            Common.getV(txList[6].toBytes(), uint16(MATIC_NETWORK_ID)),
+            bytes32(txList[7].toUint()),
+            bytes32(txList[8].toUint())
+        );
     }
 
     /**
@@ -141,47 +158,47 @@ contract AugurPredicateBase {
      * branchMask Merkle proof branchMask for the receipt
      * logIndex Log Index to read from the receipt
      */
-    function claimShareBalances(bytes memory data) internal returns(address) {
-        // bytes32 txHash = getTxHash(data.toRlpItem().toList());
+    function claimShareBalances(bytes memory data) internal returns(address account) {
+        bytes32 txHash = getTxHash(data.toRlpItem().toList());
 
-        // (
-        //     address[] memory accounts,
-        //     address[] memory markets,
-        //     uint256[] memory outcomes,
-        //     uint256[] memory balances,
-        //     uint256 age
-        // ) = shareTokenPredicate.parseData(data);
+        (
+            address[] memory accounts,
+            address[] memory markets,
+            uint256[] memory outcomes,
+            uint256[] memory balances,
+            uint256 age
+        ) = shareTokenPredicate.parseData(data);
 
-        // address account = accounts[0];
-        // address market = markets[0];
+        address account = accounts[0];
+        address market = markets[0];
 
-        // uint256 exitId = getExitId(account);
-        // ExitData storage exit = getExit(exitId);
+        uint256 exitId = getExitId(account);
+        ExitData storage exit = getExit(exitId);
 
-        // for (uint256 i = 0; i < accounts.length; i++) {
-        //     require(account == accounts[i]);
-        //     require(market == markets[i]);
+        for (uint256 i = 0; i < accounts.length; i++) {
+            require(account == accounts[i]);
+            require(market == markets[i]);
 
-        //     account = accounts[i];
-        //     market = markets[i];
+            account = accounts[i];
+            market = markets[i];
 
-        //     // exitShareToken.mint(account, IMarket(market), outcomes[i], balances[i]);
-        // }
+            exitShareToken.mint(account, IMarket(market), outcomes[i], balances[i]);
+        }
 
-        // exit.exitPriority = exit.exitPriority.max(age);
+        exit.exitPriority = exit.exitPriority.max(age);
 
-        // _addMarketToExit(exitId, market);
+        _addMarketToExit(exitId, market);
 
-        // txHash = keccak256(
-        //     abi.encodePacked(
-        //         txHash, 
-        //         account
-        //     )
-        // );
-        // require(claimedTxs[txHash] == false, "tx claimed");
-        // claimedTxs[txHash] = true;
+        txHash = keccak256(
+            abi.encodePacked(
+                txHash, 
+                account
+            )
+        );
+        require(claimedTxs[txHash] == false, "tx claimed");
+        claimedTxs[txHash] = true;
 
-        return address(0x0);
+        return account;
     }
 
     /**
@@ -220,7 +237,7 @@ contract AugurPredicateBase {
 
         require(tokenAddress == predicateRegistry.cash(), '17'); // "not matic cash"
 
-        exit.exitPriority = exit.exitPriority.max(age);
+        exit.exitPriority = exit.exitPriority.max(age); // TODO, should it be a max, or min?
 
         exitCash.faucet(participant, closingBalance);
 
@@ -239,26 +256,21 @@ contract AugurPredicateBase {
 
         require(augur.isKnownMarket(_market), '15'); // "AugurPredicate:_addMarketToExit: Market does not exist"
 
-        uint256 numOutcomes = _market.getNumberOfOutcomes();
-        uint256 numTicks = _market.getNumTicks();
-
         ExitData storage exit = getExit(exitId);
 
-        if (exit.market != IMarket(0)) {
+        if (exit.market == IMarket(0)) {
             exit.market = _market;
-            exitShareToken.initializeMarket(_market, numOutcomes, numTicks);
         }
     }
 
-    function claimSharesAndCash(bytes memory shares, bytes memory cash) internal returns(address account) {
-        // account = claimShareBalances(shares);
+    function claimSharesAndCash(bytes memory shares, bytes memory cash, address exitor) internal {
+        if (shares.length > 0) {
+            require(claimShareBalances(shares) == exitor);
+        }
 
-        // if (cash.length > 0) {
-        //     // not mandatory for in-flight trade
-        //     // claimCashBalance(cash, account);
-        // }
-
-        // return account;
+        if (cash.length > 0) {
+            claimCashBalance(cash, exitor);
+        }
     }
 
     function startExit() internal {

@@ -7,7 +7,17 @@ contract AugurPredicateSpec {
 
     function prepareInFlightTradeExit(bytes calldata shares, bytes calldata cash) external {}
     
-    function startInFlightTradeExit() public {}
+    function startInFlightTradeExit(
+        bytes calldata counterPartyShares,
+        bytes calldata counterPartyCash,
+        bytes calldata tradeData,
+        address counterParty
+    ) external payable {}
 
-    function executeInFlightTransaction(bytes memory data) public payable {}
+    function startInFlightSharesAndCashExit(
+        bytes calldata shares,
+        bytes calldata sharesInFlightTx,
+        bytes calldata cash,
+        bytes calldata cashInFlightTx
+    ) external {}
 }

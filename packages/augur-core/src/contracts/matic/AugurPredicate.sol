@@ -29,11 +29,15 @@ import 'ROOT/trading/IAugurTrading.sol';
 import 'ROOT/Cash.sol';
 import 'ROOT/libraries/Initializable.sol';
 import 'ROOT/libraries/math/SafeMathUint256.sol';
+import 'ROOT/libraries/math/SafeMathInt256.sol';
 
 contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
     using RLPReader for bytes;
     using RLPReader for RLPReader.RLPItem;
     using SafeMathUint256 for uint256;
+    using SafeMathInt256 for int256;
+
+    uint256 internal constant CASH_FACTOR_PRECISION = 10**25;
 
     function initialize(
         IAugur _augur,
@@ -92,7 +96,7 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
         exitCash = _exitCash;
     }
 
-    function getCodeExtension() external view returns(address) {
+    function getCodeExtension() external view returns (address) {
         return codeExtension;
     }
 
@@ -116,7 +120,13 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
 
             // revert instead of invalid() bc if the underlying call failed with invalid() it already wasted gas.
             // if the call returned error data, forward it
-            return(ptr, size)
+            switch result
+                case 0 {
+                    revert(ptr, size)
+                }
+                default {
+                    return(ptr, size)
+                }
         }
     }
 
@@ -132,104 +142,58 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
         require(rootFeePot.depositFees(payout));
     }
 
-    // function startInFlightTradeExit(
-    //     bytes calldata counterPartyShares,
-    //     bytes calldata counterPartyCash,
-    //     bytes calldata tradeData
-    // ) external {
-    //     uint256 exitId = getExitId(msg.sender);
-    //     ExitData storage exit = getExit(exitId);
-    //     // require(
-    //     //     exit.status == ExitStatus.Initialized,
-    //     //     '16' // "Predicate.claimShareBalance: Please call initializeForExit first"
-    //     // );
-    //     (
-    //         address account,
-    //         address market,
-    //         uint256 outcome,
-    //         uint256 balance,
-    //         uint256 age
-    //     ) = shareTokenPredicate.parseData(data);
+    function startInFlightTradeExit(
+        bytes calldata counterpartyShares,
+        bytes calldata counterpartyCash,
+        bytes calldata inFlightTx,
+        address counterparty
+    ) external payable {
+        require(counterparty != msg.sender);
 
-    //     require(exitShareToken.balanceOfMarketOutcome(IMarket(market), outcome, account) == 0, '16'); // shares were claimed
+        uint256 exitId = getExitId(msg.sender);
+        ExitData storage exit = getExit(exitId);
 
-    //     _addMarketToExit(exitId, market);
-        
-    //     exit.exitPriority = exit.exitPriority.max(
-    //         age
-    //     );
-    //     exitShareToken.mint(
-    //         account,
-    //         IMarket(market),
-    //         outcome,
-    //         balance
-    //     );
-    //     setIsExecuting(false);
-    // }
+        require(exit.counterparty == address(0));
+        exit.counterparty = counterparty;
 
-    function startInFlightTradeExit() public {
-        // setIsExecuting(true);
-        // claimSharesAndCash(shares, cash);
-        // require(claimSharesAndCash(shares, cash) != msg.sender, "test");
+        setIsExecuting(true);
 
-        // uint256 exitId = getExitId(msg.sender);
-        // ExitData storage exit = getExit(exitId);
-        // address signer;
+        claimSharesAndCash(counterpartyShares, counterpartyCash, counterparty);
 
-        // (signer, exit.inFlightTxHash) = erc20Predicate.getAddressFromTx(inFlightTx);
+        address signer;
 
-        // require(signer == msg.sender, "test2"); // only signer allowed to exit with his trade
-        
-        // this.executeTrade.value(msg.value)(inFlightTx, exitId, signer);
+        (signer, exit.inFlightTxHash) = erc20Predicate.getAddressFromTx(
+            inFlightTx
+        );
 
-        // startExit();
+        require(signer == msg.sender, "not signer"); // only signer allowed to exit with his trade
 
-        // setIsExecuting(false);
+        this.executeTrade.value(msg.value)(inFlightTx, exitId, signer);
+
+        startExit();
+
+        setIsExecuting(false);
     }
 
-    function executeInFlightTransaction(bytes memory data) public payable {
-        // uint256 exitId = getExitId(msg.sender);
-        // ExitData storage exit = getExit(exitId);
-        // // require(
-        // //     exit.status == ExitStatus.Initialized,
-        // //     '14' // "executeInFlightTransaction: Exit should be in Initialized state"
-        // // );
-        // exit.status = ExitStatus.InFlightExecuted; // this ensures only 1 in-flight tx can be replayed on-chain
+    function startInFlightSharesAndCashExit(
+        bytes calldata shares,
+        bytes calldata sharesInFlightTx,
+        bytes calldata cash,
+        bytes calldata cashInFlightTx
+    ) external {
+        setIsExecuting(true);
+        claimSharesAndCash(shares, cash, msg.sender);
 
-        // RLPReader.RLPItem[] memory targetTx = ProofReader.convertToTx(data);
-        // require(targetTx.length == 9, '13'); // "incorrect transaction data"
+        if (sharesInFlightTx.length > 0) {
+            executeSharesInFlight(sharesInFlightTx);
+        }
 
-        // address to = ProofReader.getTxTo(targetTx);
-        // address signer;
-        // (signer, exit.inFlightTxHash) = erc20Predicate
-        //     .getAddressFromTx(data);
+        if (cashInFlightTx.length > 0) {
+            executeCashInFlight(cashInFlightTx);
+        }
 
-        // setIsExecuting(true);
-
-        // PredicateRegistry.ContractType _type = predicateRegistry
-        //     .getContractType(to);
-
-        // if (_type == PredicateRegistry.ContractType.ShareToken) {
-        //     require(signer == msg.sender, '12'); // "executeInFlightTransaction: signer != msg.sender"
-        //     exit.lastGoodNonce =
-        //         int256(ProofReader.getTxNonce(targetTx)) -
-        //         1;
-        //     shareTokenPredicate.executeInFlightTransaction(
-        //         data,
-        //         signer,
-        //         exitShareToken
-        //     );
-        // } else if (_type == PredicateRegistry.ContractType.Cash) {
-        //     require(signer == msg.sender, '12'); // "executeInFlightTransaction: signer != msg.sender"
-        //     exit.lastGoodNonce =
-        //         int256(ProofReader.getTxNonce(targetTx)) -
-        //         1;
-        //     executeCashInFlight(data, exitId);
-        // } else if (_type == PredicateRegistry.ContractType.ZeroXTrade) {
-        //     this.executeTrade.value(msg.value)(data, exitId, signer);
-        // }
-
-        // setIsExecuting(false);
+        startExit();
+        setIsExecuting(false);
     }
 
     struct ExecuteTradeVars {
@@ -284,8 +248,6 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
             )
         );
 
-        setIsExecuting(true);
-
         zeroXTrade.trade.value(msg.value)(
             trade.requestedFillAmount,
             trade.fingerprint,
@@ -296,21 +258,45 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
             trade.signatures,
             trade.taker
         );
-
-        setIsExecuting(false);
     }
 
-    function executeCashInFlight(bytes memory data, uint256 exitId) public {
-        RLPReader.RLPItem[] memory txList = data.toRlpItem().toList();
+    function executeSharesInFlight(bytes memory inFlightTx) private {
+        RLPReader.RLPItem[] memory txList = ProofReader.convertToTx(inFlightTx);
 
-        getExit(exitId).lastGoodNonce =
-            int256(ProofReader.getTxNonce(txList)) -
-            1;
+        uint256 exitId = getExitId(msg.sender);
+        ExitData storage exit = getExit(exitId);
+
+        address signer;
+        (signer, exit.inFlightTxHash) = erc20Predicate.getAddressFromTx(inFlightTx);
+        require(signer == msg.sender, '12');
+
+        exit.lastGoodNonce = exit.lastGoodNonce.max(
+            int256(ProofReader.getTxNonce(txList)) - 1
+        );
+
+        shareTokenPredicate.executeInFlightTransaction(
+            inFlightTx,
+            signer,
+            exitShareToken
+        );
+    }
+
+    function executeCashInFlight(bytes memory inFlightTx) private {
+        RLPReader.RLPItem[] memory txList = ProofReader.convertToTx(inFlightTx);
+
+        uint256 exitId = getExitId(msg.sender);
+        ExitData storage exit = getExit(exitId);
+
+        address signer;
+        (signer, exit.inFlightTxHash) = erc20Predicate.getAddressFromTx(inFlightTx);
+        require(signer == msg.sender, '12');
+
+        exit.lastGoodNonce = exit.lastGoodNonce.max(
+            int256(ProofReader.getTxNonce(txList)) - 1
+        );
 
         bytes memory txData = ProofReader.getTxData(txList);
         bytes4 funcSig = ProofReader.getFunctionSignature(txData);
-
-        setIsExecuting(true);
 
         if (funcSig == TRANSFER_FUNC_SIG) {
             exitCash.transferFrom(
@@ -322,12 +308,16 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
             // if burning happened no need to do anything
             revert('10'); // "not supported"
         }
+    }
 
-        setIsExecuting(false);
+    struct Payout {
+        address addr;
+        uint256 cash;
     }
 
     struct ExitPayouts {
-        uint256 oiCashPayout;
+        Payout counterparty;
+        Payout exitor;
         uint256 cashPayout;
     }
 
@@ -348,20 +338,24 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
         uint256 exitId;
         ExitPayouts memory payout;
 
+        payout.exitor.addr = exitor;
+
         if (isRegularExit) {
             exitId = regularExitId;
-            payout.oiCashPayout = exitIdOrAmount;
+            payout.exitor.cash = exitIdOrAmount;
         } else {
             // exit id for MoreVP exits is token amount
             exitId = exitIdOrAmount;
 
-            IMarket market = IMarket(getExit(exitId).market);
+            ExitData storage exit = getExit(exitId);
+
+            payout.counterparty.addr = exit.counterparty;
+
+            IMarket market = IMarket(exit.market);
             if (market.isFinalized()) {
                 withdrawOICash(calculateProceeds(market, exitId));
 
-                uint256 _cashBalanceBefore = augurCash.balanceOf(
-                    address(this)
-                );
+                uint256 _cashBalanceBefore = augurCash.balanceOf(address(this));
 
                 augurShareToken.claimTradingProceeds(
                     market,
@@ -369,31 +363,47 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
                     bytes32(0)
                 );
 
-                payout.cashPayout = payout.cashPayout.add(
-                    augurCash.balanceOf(address(this)).sub(
-                        _cashBalanceBefore
-                    )
+                payout.cashPayout = augurCash.balanceOf(address(this)).sub(
+                    _cashBalanceBefore
                 );
             } else {
-                processExitForMarket(market, exitor, exitId);
+                processExitForMarket(market, exitor);
+
+                if (payout.counterparty.addr != address(0)) {
+                    processExitForMarket(market, payout.counterparty.addr);
+                }
             }
 
-            payout.oiCashPayout = payout.oiCashPayout.add(exitCash.balanceOf(exitor));
-            getExit(exitId).status = ExitStatus.Finalized;
+            payout.exitor.cash = exitCash.balanceOf(exitor);
+
+            if (payout.counterparty.addr != address(0)) {
+                payout.counterparty.cash = exitCash.balanceOf(
+                    payout.counterparty.addr
+                );
+            }
         }
 
-        if (payout.oiCashPayout > 0) {
-            payout.cashPayout = payout.cashPayout.add(withdrawOICash(payout.oiCashPayout));
-        }
-        
-        if (payout.cashPayout > 0) {
+        uint256 cashOrFactor = payout.exitor.cash.add(payout.counterparty.cash);
+        cashOrFactor = withdrawOICash(cashOrFactor)
+            .mul(CASH_FACTOR_PRECISION)
+            .div(cashOrFactor);
+
+        processPayout(payout.exitor, cashOrFactor);
+        processPayout(payout.counterparty, cashOrFactor);
+
+        emit ExitFinalized(exitId, exitor);
+    }
+
+    function processPayout(Payout memory payout, uint256 cashFactor) private {
+        if (payout.cash > 0 && payout.addr != address(0)) {
             require(
-                augurCash.transfer(exitor, payout.cashPayout),
+                augurCash.transfer(
+                    payout.addr,
+                    payout.cash.mul(cashFactor).div(CASH_FACTOR_PRECISION)
+                ),
                 '6' //"cash transfer failed"
             );
         }
-
-        emit ExitFinalized(exitId, exitor);
     }
 
     function withdrawOICash(uint256 amount) private returns (uint256) {
@@ -403,10 +413,10 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
         return payout;
     }
 
-    function calculateProceeds(
-        IMarket market,
-        uint256 exitId
-    ) private returns(uint256) {
+    function calculateProceeds(IMarket market, uint256 exitId)
+        private
+        returns (uint256)
+    {
         uint256 numOutcomes = market.getNumberOfOutcomes();
         uint256 payout;
         for (uint256 outcome = 0; outcome < numOutcomes; outcome++) {
@@ -423,11 +433,7 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
         return payout;
     }
 
-    function processExitForMarket(
-        IMarket market,
-        address exitor,
-        uint256 exitId
-    ) internal {
+    function processExitForMarket(IMarket market, address exitor) internal {
         uint256 numOutcomes = market.getNumberOfOutcomes();
         uint256 completeSetsToBuy;
         uint256[] memory outcomes = new uint256[](numOutcomes);
