@@ -159,7 +159,7 @@ contract AugurPredicateBase {
      * logIndex Log Index to read from the receipt
      */
     function claimShareBalances(bytes memory data) internal returns(address account) {
-        bytes32 txHash = getTxHash(data.toRlpItem().toList());
+        bytes32 txHash = getTxHash(ProofReader.convertToTx(data));
 
         (
             address[] memory accounts,
@@ -219,7 +219,7 @@ contract AugurPredicateBase {
     function claimCashBalance(bytes memory data, address participant)
         internal
     {
-        bytes32 txHash = getTxHash(data.toRlpItem().toList());
+        bytes32 txHash = getTxHash(ProofReader.convertToTx(data));
         uint256 exitId = getExitId(participant);
         ExitData storage exit = getExit(exitId);
 
@@ -235,7 +235,7 @@ contract AugurPredicateBase {
         (uint256 closingBalance, uint256 age, , address tokenAddress) = abi
             .decode(_preState, (uint256, uint256, address, address));
 
-        require(tokenAddress == predicateRegistry.cash(), '17'); // "not matic cash"
+        require(tokenAddress == address(oiCash), '17'); // "not matic cash"
 
         exit.exitPriority = exit.exitPriority.max(age); // TODO, should it be a max, or min?
 

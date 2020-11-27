@@ -500,8 +500,8 @@ contract ExitFillOrder is Initializable, ReentrancyGuard, IExitFillOrder {
     function fillZeroXOrder(
       IExitFillOrder.FillZeroXOrderArguments calldata args
     ) external returns (uint256 _amountRemainingFillerWants, uint256 _totalFees) {
-        require(msg.sender == zeroXTrade, "not zeroxtrade");
-        require(augur.isKnownMarket(args._market), "unknwown market");
+        require(msg.sender == zeroXTrade);
+        require(augur.isKnownMarket(args._market));
 
         Trade.OrderData memory _orderData = Trade.createOrderData(storedContracts.shareToken, args._market, args._outcome, args._price, args._orderType, args._amount, args._creator);
         Trade.Data memory _tradeData = Trade.createWithData(storedContracts, _orderData, args._filler, args._amount, args._fingerprint);
@@ -518,8 +518,6 @@ contract ExitFillOrder is Initializable, ReentrancyGuard, IExitFillOrder {
         uint256 _tokensRefunded = _tradeData.tradeMakerTokensForFillerTokens();
 
         sellCompleteSets(_tradeData);
-
-        // END here
 
         // Problem - next lines are not possible to be executed due to ExitFillOrder being unknown contract
 

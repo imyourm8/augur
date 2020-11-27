@@ -20,4 +20,6 @@ contract AugurPredicateSpec {
         bytes calldata cash,
         bytes calldata cashInFlightTx
     ) external {}
+
+    function getExitId(address exitor) public pure returns (uint256 exitId) {}
 }

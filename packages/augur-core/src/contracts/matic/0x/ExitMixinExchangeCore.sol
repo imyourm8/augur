@@ -222,11 +222,11 @@ contract ExitMixinExchangeCore is
             signature
         );
 
-        // // Get amount of takerAsset to fill
+        // Get amount of takerAsset to fill
         uint256 remainingTakerAssetAmount = order.takerAssetAmount.safeSub(orderInfo.orderTakerAssetFilledAmount);
         uint256 takerAssetFilledAmount = LibSafeMath.min256(takerAssetFillAmount, remainingTakerAssetAmount);
 
-        // // Compute proportional fill amounts
+        // Compute proportional fill amounts
         fillResults = LibFillResults.calculateFillResults(
             order,
             takerAssetFilledAmount,
@@ -352,20 +352,20 @@ contract ExitMixinExchangeCore is
     {
         // An order can only be filled if its status is FILLABLE.
         if (orderInfo.orderStatus != LibOrder.OrderStatus.FILLABLE) {
-            revert("test1");
+            revert();
         }
 
         // Validate sender is allowed to fill this order
         if (order.senderAddress != address(0)) {
             if (order.senderAddress != msg.sender) {
-                revert("test2");
+                revert();
             }
         }
 
         // Validate taker is allowed to fill this order
         if (order.takerAddress != address(0)) {
             if (order.takerAddress != takerAddress) {
-                revert("test3");
+                revert();
             }
         }
 
@@ -376,7 +376,7 @@ contract ExitMixinExchangeCore is
                 signature
             )
         ) {
-            revert("test4");
+            revert();
         }
     }
 

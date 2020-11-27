@@ -299,11 +299,13 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
         bytes4 funcSig = ProofReader.getFunctionSignature(txData);
 
         if (funcSig == TRANSFER_FUNC_SIG) {
+            address counterparty = BytesLib.toAddress(txData, 4);
             exitCash.transferFrom(
                 msg.sender, // from
                 BytesLib.toAddress(txData, 4), // to
                 BytesLib.toUint(txData, 36) // amount
             );
+            exit.counterparty = counterparty;
         } else if (funcSig != BURN_FUNC_SIG) {
             // if burning happened no need to do anything
             revert('10'); // "not supported"
@@ -352,25 +354,28 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
             payout.counterparty.addr = exit.counterparty;
 
             IMarket market = IMarket(exit.market);
-            if (market.isFinalized()) {
-                withdrawOICash(calculateProceeds(market, exitId));
+            
+            if (market != IMarket(0)) {
+                if (market.isFinalized()) {
+                    withdrawOICash(calculateProceeds(market, exitId));
 
-                uint256 _cashBalanceBefore = augurCash.balanceOf(address(this));
+                    uint256 _cashBalanceBefore = augurCash.balanceOf(address(this));
 
-                augurShareToken.claimTradingProceeds(
-                    market,
-                    address(this),
-                    bytes32(0)
-                );
+                    augurShareToken.claimTradingProceeds(
+                        market,
+                        address(this),
+                        bytes32(0)
+                    );
 
-                payout.cashPayout = augurCash.balanceOf(address(this)).sub(
-                    _cashBalanceBefore
-                );
-            } else {
-                processExitForMarket(market, exitor);
+                    payout.cashPayout = augurCash.balanceOf(address(this)).sub(
+                        _cashBalanceBefore
+                    );
+                } else {
+                    processExitForMarket(market, exitor);
 
-                if (payout.counterparty.addr != address(0)) {
-                    processExitForMarket(market, payout.counterparty.addr);
+                    if (payout.counterparty.addr != address(0)) {
+                        processExitForMarket(market, payout.counterparty.addr);
+                    }
                 }
             }
 
@@ -384,14 +389,17 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
         }
 
         uint256 cashOrFactor = payout.exitor.cash.add(payout.counterparty.cash);
-        cashOrFactor = withdrawOICash(cashOrFactor)
-            .mul(CASH_FACTOR_PRECISION)
-            .div(cashOrFactor);
 
-        processPayout(payout.exitor, cashOrFactor);
-        processPayout(payout.counterparty, cashOrFactor);
+        if (cashOrFactor > 0) {
+            cashOrFactor = withdrawOICash(cashOrFactor)
+                .mul(CASH_FACTOR_PRECISION)
+                .div(cashOrFactor);
 
-        emit ExitFinalized(exitId, exitor);
+            processPayout(payout.exitor, cashOrFactor);
+            processPayout(payout.counterparty, cashOrFactor);
+        }
+
+        emit ExitFinalized(1, address(0));
     }
 
     function processPayout(Payout memory payout, uint256 cashFactor) private {
