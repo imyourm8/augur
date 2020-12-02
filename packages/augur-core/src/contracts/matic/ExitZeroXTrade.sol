@@ -252,83 +252,101 @@ contract ExitZeroXTrade is Initializable, IExitZeroXTrade, IZeroXTrade, IERC1155
     }
 
     // Trade functions
+    struct TradeData {
+        uint256 requestedFillAmount;
+        bytes32 fingerprint;
+        bytes32 tradeGroupId;
+        uint256 maxProtocolFeeDai;
+        uint256 maxTrades;
+        IExchange.Order[] orders;
+        bytes[] signatures;
+    }
+
     struct TradeVars {
         uint256 _protocolFee;
         uint256 _fillAmountRemaining;
         uint256 _amountTraded;
         bool _success;
+        TradeData trade;
     }
 
     /**
      * Perform Augur Trades using 0x signed orders
-     *
-     * @param  _requestedFillAmount  Share amount to fill
-     * @param  _fingerprint          Fingerprint of the user to restrict affiliate fees
-     * @param  _tradeGroupId         Random id to correlate these fills as one trade action
-     * @param  _maxProtocolFeeDai    The maximum amount of DAI to spend on covering the 0x protocol fee
-     * @param  _maxTrades            The maximum number of trades to actually take from the provided 0x orders
-     * @param  _orders               Array of encoded Order struct data
-     * @param  _signatures           Array of signature data
-     * @return                       The amount the taker still wants
      */
     function trade(
-        uint256 _requestedFillAmount,
-        bytes32 _fingerprint,
-        bytes32 _tradeGroupId,
-        uint256 _maxProtocolFeeDai,
-        uint256 _maxTrades,
-        IExchange.Order[] memory _orders,
-        bytes[] memory _signatures,
-        address _taker
+        bytes memory data,
+        uint256 taker
     )
         public
         payable
         returns (uint256)
     {
-        require(_orders.length > 0, "no orders");
-
-        transferFromAllowed = true;
-
         TradeVars memory vars;
-        vars._fillAmountRemaining = _requestedFillAmount;
 
-        vars._protocolFee = exchange.protocolFeeMultiplier().mul(tx.gasprice);
-        coverProtocolFee(vars._protocolFee.mul(_maxTrades), _maxProtocolFeeDai);
+        (
+            vars.trade.requestedFillAmount,
+            vars.trade.fingerprint,
+            vars.trade.tradeGroupId,
+            vars.trade.maxProtocolFeeDai,
+            vars.trade.maxTrades,
+            vars.trade.orders,
+            vars.trade.signatures
+        ) = abi.decode(
+            data.slice(4, data.length),
+            (
+                uint256,
+                bytes32,
+                bytes32,
+                uint256,
+                uint256,
+                IExchange.Order[],
+                bytes[]
+            )
+        );
+
+        // require(vars.trade.orders.length > 0, "no orders");
+
+        // transferFromAllowed = true;
+
+        // vars._fillAmountRemaining = vars.trade.requestedFillAmount;
+
+        // vars._protocolFee = exchange.protocolFeeMultiplier().mul(tx.gasprice);
+        // coverProtocolFee(vars._protocolFee.mul(vars.trade.maxTrades), vars.trade.maxProtocolFeeDai);
         
-        // Do the actual asset exchanges
-        for (uint256 i = 0; i < _orders.length && vars._fillAmountRemaining != 0; i++) {
-            IExchange.Order memory _order = _orders[i];
-            validateOrder(_order, vars._fillAmountRemaining);
+        // // Do the actual asset exchanges
+        // for (uint256 i = 0; i < vars.trade.orders.length && vars._fillAmountRemaining != 0; i++) {
+        //     IExchange.Order memory _order = vars.trade.orders[i];
+        //     validateOrder(_order, vars._fillAmountRemaining);
 
-            // Update 0x and pay protocol fee. This will also validate signatures and order state for us.
-            IExchange.FillResults memory totalFillResults = fillOrderNoThrow(
-                _order,
-                vars._fillAmountRemaining,
-                _signatures[i],
-                vars._protocolFee
-            );
+        //     // Update 0x and pay protocol fee. This will also validate signatures and order state for us.
+        //     IExchange.FillResults memory totalFillResults = fillOrderNoThrow(
+        //         _order,
+        //         vars._fillAmountRemaining,
+        //         vars.trade.signatures[i],
+        //         vars._protocolFee
+        //     );
 
-            if (totalFillResults.takerAssetFilledAmount == 0) {
-                continue;
-            }
+        //     if (totalFillResults.takerAssetFilledAmount == 0) {
+        //         continue;
+        //     }
 
-            vars._amountTraded = doTrade(_order, totalFillResults.takerAssetFilledAmount, _fingerprint, _tradeGroupId, _taker);
+        //     vars._amountTraded = doTrade(_order, totalFillResults.takerAssetFilledAmount, vars.trade.fingerprint, vars.trade.tradeGroupId, address(taker));
 
-            vars._fillAmountRemaining = vars._fillAmountRemaining.sub(vars._amountTraded);
-            _maxTrades -= 1;
-            if (_maxTrades == 0) {
-                break;
-            }
-        }
+        //     vars._fillAmountRemaining = vars._fillAmountRemaining.sub(vars._amountTraded);
+        //     vars.trade.maxTrades -= 1;
+        //     if (vars.trade.maxTrades == 0) {
+        //         break;
+        //     }
+        // }
 
-        transferFromAllowed = false;
+        // transferFromAllowed = false;
 
-        if (address(this).balance > 0) {
-            (vars._success,) = address(uint160(_taker)).call.value(address(this).balance)("");
-            require(vars._success);
-        }
+        // if (address(this).balance > 0) {
+        //     (vars._success,) = address(uint160(taker)).call.value(address(this).balance)("");
+        //     require(vars._success);
+        // }
 
-        return vars._fillAmountRemaining;
+        // return vars._fillAmountRemaining;
     }
 
     function fillOrderNoThrow(IExchange.Order memory _order, uint256 _takerAssetFillAmount, bytes memory _signature, uint256 _protocolFee) internal returns (IExchange.FillResults memory fillResults) {

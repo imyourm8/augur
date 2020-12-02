@@ -2,7 +2,7 @@ pragma solidity 0.5.15;
 pragma experimental ABIEncoderV2;
 
 import 'ROOT/matic/PredicateRegistry.sol';
-import 'ROOT/matic/libraries/BytesLib.sol';
+import 'ROOT/libraries/LibBytes.sol';
 import 'ROOT/matic/libraries/RLPEncode.sol';
 import 'ROOT/matic/libraries/RLPReader.sol';
 import 'ROOT/matic/libraries/ProofReader.sol';
@@ -36,6 +36,7 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
     using RLPReader for RLPReader.RLPItem;
     using SafeMathUint256 for uint256;
     using SafeMathInt256 for int256;
+    using LibBytes for bytes;
 
     uint256 internal constant CASH_FACTOR_PRECISION = 10**25;
 
@@ -168,8 +169,8 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
 
         require(signer == msg.sender, "not signer"); // only signer allowed to exit with his trade
 
-        this.executeTrade.value(msg.value)(inFlightTx, exitId, signer);
-
+        // executeTrade(inFlightTx, exitId, signer);
+        
         startExit();
 
         setIsExecuting(false);
@@ -180,7 +181,7 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
         bytes calldata sharesInFlightTx,
         bytes calldata cash,
         bytes calldata cashInFlightTx
-    ) external {
+    ) external payable {
         setIsExecuting(true);
         claimSharesAndCash(shares, cash, msg.sender);
 
@@ -210,10 +211,7 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
 
         vars.txList = ProofReader.convertToTx(data);
 
-        TradeData memory trade;
-        trade.taker = signer; // signer of the tx is the taker; akin to taker being msg.sender in the main contract
-
-        if (trade.taker == msg.sender) {
+        if (signer == msg.sender) {
             getExit(exitId).lastGoodNonce =
                 int256(ProofReader.getTxNonce(vars.txList)) -
                 1;
@@ -227,89 +225,59 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
             '1' // "not ZEROX_TRADE_FUNC_SIG"
         );
 
-        (
-            trade.requestedFillAmount,
-            trade.fingerprint,
-            trade.tradeGroupId,
-            trade.maxProtocolFeeDai,
-            trade.maxTrades,
-            trade.orders,
-            trade.signatures
-        ) = abi.decode(
-            BytesLib.slice(vars.txData, 4, vars.txData.length - 4),
-            (
-                uint256,
-                bytes32,
-                bytes32,
-                uint256,
-                uint256,
-                IExchange.Order[],
-                bytes[]
-            )
-        );
-
-        zeroXTrade.trade.value(msg.value)(
-            trade.requestedFillAmount,
-            trade.fingerprint,
-            trade.tradeGroupId,
-            trade.maxProtocolFeeDai,
-            trade.maxTrades,
-            trade.orders,
-            trade.signatures,
-            trade.taker
-        );
+        zeroXTrade.trade.value(msg.value)(vars.txData, uint256(signer));
     }
 
     function executeSharesInFlight(bytes memory inFlightTx) private {
-        RLPReader.RLPItem[] memory txList = ProofReader.convertToTx(inFlightTx);
+        // RLPReader.RLPItem[] memory txList = ProofReader.convertToTx(inFlightTx);
 
-        uint256 exitId = getExitId(msg.sender);
-        ExitData storage exit = getExit(exitId);
+        // uint256 exitId = getExitId(msg.sender);
+        // ExitData storage exit = getExit(exitId);
 
-        address signer;
-        (signer, exit.inFlightTxHash) = erc20Predicate.getAddressFromTx(inFlightTx);
-        require(signer == msg.sender, '12');
+        // address signer;
+        // (signer, exit.inFlightTxHash) = erc20Predicate.getAddressFromTx(inFlightTx);
+        // require(signer == msg.sender, '12');
 
-        exit.lastGoodNonce = exit.lastGoodNonce.max(
-            int256(ProofReader.getTxNonce(txList)) - 1
-        );
+        // exit.lastGoodNonce = exit.lastGoodNonce.max(
+        //     int256(ProofReader.getTxNonce(txList)) - 1
+        // );
 
-        shareTokenPredicate.executeInFlightTransaction(
-            inFlightTx,
-            signer,
-            exitShareToken
-        );
+        // shareTokenPredicate.executeInFlightTransaction(
+        //     inFlightTx,
+        //     signer,
+        //     exitShareToken
+        // );
     }
 
     function executeCashInFlight(bytes memory inFlightTx) private {
-        RLPReader.RLPItem[] memory txList = ProofReader.convertToTx(inFlightTx);
+        // RLPReader.RLPItem[] memory txList = ProofReader.convertToTx(inFlightTx);
 
-        uint256 exitId = getExitId(msg.sender);
-        ExitData storage exit = getExit(exitId);
+        // uint256 exitId = getExitId(msg.sender);
+        // ExitData storage exit = getExit(exitId);
 
-        address signer;
-        (signer, exit.inFlightTxHash) = erc20Predicate.getAddressFromTx(inFlightTx);
-        require(signer == msg.sender, '12');
+        // address signer;
+        // (signer, exit.inFlightTxHash) = erc20Predicate.getAddressFromTx(inFlightTx);
+        // require(signer == msg.sender, '12');
 
-        exit.lastGoodNonce = exit.lastGoodNonce.max(
-            int256(ProofReader.getTxNonce(txList)) - 1
-        );
+        // exit.lastGoodNonce = exit.lastGoodNonce.max(
+        //     int256(ProofReader.getTxNonce(txList)) - 1
+        // );
 
-        bytes memory txData = ProofReader.getTxData(txList);
-        bytes4 funcSig = ProofReader.getFunctionSignature(txData);
+        // bytes memory txData = ProofReader.getTxData(txList);
+        // bytes4 funcSig = ProofReader.getFunctionSignature(txData);
 
-        if (funcSig == TRANSFER_FUNC_SIG) {
-            address counterparty = BytesLib.toAddress(txData, 4);
-            exitCash.transferFrom(
-                msg.sender, // from
-                BytesLib.toAddress(txData, 4), // to
-                BytesLib.toUint(txData, 36) // amount
-            );
-            exit.counterparty = counterparty;
-        } else if (funcSig != BURN_FUNC_SIG) {
-            // if burning happened no need to do anything
-            revert('10'); // "not supported"
-        }
+        // if (funcSig == TRANSFER_FUNC_SIG) {
+        //     address counterparty = BytesLib.toAddress(txData, 4);
+        //     exitCash.transferFrom(
+        //         msg.sender, // from
+        //         BytesLib.toAddress(txData, 4), // to
+        //         BytesLib.toUint(txData, 36) // amount
+        //     );
+        //     exit.counterparty = counterparty;
+        // } else if (funcSig != BURN_FUNC_SIG) {
+        //     // if burning happened no need to do anything
+        //     revert('10'); // "not supported"
+        // }
     }
 
     struct Payout {
@@ -399,7 +367,7 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
             processPayout(payout.counterparty, cashOrFactor);
         }
 
-        emit ExitFinalized(1, address(0));
+        emit ExitFinalized(exitId, exitor);
     }
 
     function processPayout(Payout memory payout, uint256 cashFactor) private {
@@ -508,59 +476,59 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
             '11' // "provide more recent tx"
         );
 
-        RLPReader.RLPItem[] memory challengeList = challengeData
-            .toRlpItem()
-            .toList();
+        RLPReader.RLPItem[] memory challengeList = ProofReader.convertToTx(challengeData);
         RLPReader.RLPItem[] memory challengeTx = ProofReader.getChallengeTx(
             challengeList
         );
 
-        require(challengeTx.length == 9, '4'); // "MALFORMED_WITHDRAW_TX"
+        // require(challengeTx.length == 9, '4'); // "MALFORMED_WITHDRAW_TX"
 
-        (address signer, bytes32 txHash) = erc20Predicate.getAddressFromTx(
-            ProofReader.getChallengeTxBytes(challengeList)
-        );
+        // (address signer, bytes32 txHash) = erc20Predicate.getAddressFromTx(
+        //     ProofReader.getChallengeTxBytes(challengeList)
+        // );
 
-        require(
-            getExit(exitId).inFlightTxHash != txHash,
-            '3' // "can't challenge with the exit tx itself"
-        );
+        // require(
+        //     getExit(exitId).inFlightTxHash != txHash,
+        //     '3' // "can't challenge with the exit tx itself"
+        // );
 
-        bytes memory txData = ProofReader.getTxData(challengeTx);
-        address to = ProofReader.getTxTo(challengeTx);
+        // bytes memory txData = ProofReader.getTxData(challengeTx);
+        // address to = ProofReader.getTxTo(challengeTx);
 
-        if (signer == exitor) {
-            if (
-                int256(ProofReader.getTxNonce(challengeTx)) <=
-                getExit(exitId).lastGoodNonce
-            ) {
-                return false;
-            }
+        // if (signer == exitor) {
+        //     if (
+        //         int256(ProofReader.getTxNonce(challengeTx)) <=
+        //         getExit(exitId).lastGoodNonce
+        //     ) {
+        //         return false;
+        //     }
 
-            PredicateRegistry.DeprecationType _type = predicateRegistry
-                .getDeprecationType(to);
+        //     PredicateRegistry.DeprecationType _type = predicateRegistry
+        //         .getDeprecationType(to);
 
-            if (_type == PredicateRegistry.DeprecationType.Default) {
-                return true;
-            } else if (_type == PredicateRegistry.DeprecationType.ShareToken) {
-                return shareTokenPredicate.isValidDeprecation(txData);
-            } else if (_type == PredicateRegistry.DeprecationType.Cash) {
-                bytes4 funcSig = ProofReader.getFunctionSignature(txData);
+        //     if (_type == PredicateRegistry.DeprecationType.Default) {
+        //         return true;
+        //     } else if (_type == PredicateRegistry.DeprecationType.ShareToken) {
+        //         return shareTokenPredicate.isValidDeprecation(txData);
+        //     } else if (_type == PredicateRegistry.DeprecationType.Cash) {
+        //         bytes4 funcSig = ProofReader.getFunctionSignature(txData);
 
-                if (funcSig == TRANSFER_FUNC_SIG || funcSig == BURN_FUNC_SIG) {
-                    return true;
-                }
-            }
-        }
+        //         if (funcSig == TRANSFER_FUNC_SIG || funcSig == BURN_FUNC_SIG) {
+        //             return true;
+        //         }
+        //     }
+        // }
 
-        return
-            isValidDeprecation(
-                txData,
-                to,
-                ProofReader.getLogIndex(challengeList), // log index is order index
-                exitor,
-                exitId
-            );
+        // return
+        //     isValidDeprecation(
+        //         txData,
+        //         to,
+        //         ProofReader.getLogIndex(challengeList), // log index is order index
+        //         exitor,
+        //         exitId
+        //     );
+
+        return true;
     }
 
     function isValidDeprecation(
@@ -570,49 +538,50 @@ contract AugurPredicate is AugurPredicateBase, Initializable, IAugurPredicate {
         address exitor,
         uint256 exitId
     ) internal view returns (bool) {
-        require(
-            to == predicateRegistry.zeroXTrade(),
-            '2' // "not zeroXTrade"
-        );
+        // require(
+        //     to == predicateRegistry.zeroXTrade(),
+        //     '2' // "not zeroXTrade"
+        // );
 
-        require(
-            ProofReader.getFunctionSignature(txData) == ZEROX_TRADE_FUNC_SIG,
-            '1' // "not ZEROX_TRADE_FUNC_SIG"
-        );
+        // require(
+        //     ProofReader.getFunctionSignature(txData) == ZEROX_TRADE_FUNC_SIG,
+        //     '1' // "not ZEROX_TRADE_FUNC_SIG"
+        // );
 
-        (
-            ,
-            ,
-            ,
-            IExchange.Order[] memory _orders,
-            bytes[] memory _signatures
-        ) = abi.decode(
-            BytesLib.slice(txData, 4, txData.length - 4),
-            (uint256, address, bytes32, IExchange.Order[], bytes[])
-        );
+        // (
+        //     ,
+        //     ,
+        //     ,
+        //     ,
+        //     IExchange.Order[] memory _orders,
+        //     bytes[] memory _signatures
+        // ) = abi.decode(
+        //     txData,
+        //     (bytes4, uint256, address, bytes32, IExchange.Order[], bytes[])
+        // );
 
-        IExchange.Order memory order = _orders[orderIndex];
-        require(
-            order.makerAddress == exitor,
-            '20' // Order not signed by the exitor
-        );
+        // IExchange.Order memory order = _orders[orderIndex];
+        // require(
+        //     order.makerAddress == exitor,
+        //     '20' // Order not signed by the exitor
+        // );
 
-        require(
-            getExit(exitId).startExitTime <= order.expirationTimeSeconds,
-            '22' // expired order
-        );
+        // require(
+        //     getExit(exitId).startExitTime <= order.expirationTimeSeconds,
+        //     '22' // expired order
+        // );
 
-        IExchange exchange = zeroXTrade.getExchange();
-        IExchange.OrderInfo memory orderInfo = exchange.getOrderInfo(order);
+        // IExchange exchange = zeroXTrade.getExchange();
+        // IExchange.OrderInfo memory orderInfo = exchange.getOrderInfo(order);
 
-        require(
-            exchange.isValidSignature(
-                order,
-                orderInfo.orderHash,
-                _signatures[orderIndex]
-            ),
-            '23' // invalid signature
-        );
+        // require(
+        //     exchange.isValidSignature(
+        //         order,
+        //         orderInfo.orderHash,
+        //         _signatures[orderIndex]
+        //     ),
+        //     '23' // invalid signature
+        // );
 
         return true;
     }

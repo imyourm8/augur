@@ -64,7 +64,7 @@ contract FeePotPredicate is Ownable, Initializable {
         );
 
         RLPReader.RLPItem[] memory log = ProofReader.getLog(
-            ProofReader.convertToExitPayload(data)
+            ProofReader.convertToTx(data)
         );
         exitAmount = BytesLib.toUint(log[2].toBytes(), 0);
 

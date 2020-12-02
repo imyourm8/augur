@@ -35,6 +35,7 @@ contract AugurPredicateBase {
     using RLPReader for RLPReader.RLPItem;
     using SafeMathUint256 for uint256;
 
+    uint256 internal constant BOND_AMOUNT = 10**17;
     uint256 internal constant MATIC_NETWORK_ID = 15001;
     uint256 internal constant MAX_APPROVAL_AMOUNT = 2**256 - 1;
 
@@ -65,17 +66,6 @@ contract AugurPredicateBase {
         bytes32 inFlightTxHash;
         IMarket market;
         address counterparty;
-    }
-
-    struct TradeData {
-        uint256 requestedFillAmount;
-        bytes32 fingerprint;
-        bytes32 tradeGroupId;
-        uint256 maxProtocolFeeDai;
-        uint256 maxTrades;
-        IExchange.Order[] orders;
-        bytes[] signatures;
-        address taker;
     }
 
     PredicateRegistry public predicateRegistry;
@@ -274,6 +264,8 @@ contract AugurPredicateBase {
     }
 
     function startExit() internal {
+        require(msg.value >= BOND_AMOUNT, "Invalid Bond amount");
+
         address exitor = msg.sender;
         uint256 exitId = getExitId(exitor);
         ExitData storage exit = getExit(exitId);
